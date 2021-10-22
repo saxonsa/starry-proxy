@@ -1,22 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	manet "github.com/multiformats/go-multiaddr-net"
-	"io"
 	"log"
 	"net"
 	"net/http"
-	"strings"
-
-	"github.com/libp2p/go-libp2p"
 
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -24,16 +19,10 @@ import (
 
 	gostream "github.com/libp2p/go-libp2p-gostream"
 
-	relay "github.com/diandianl/p2p-proxy/relay"
+	"github.com/diandianl/p2p-proxy/relay"
 )
 
 const Protocol = "/proxy-example/0.0.1"
-
-type Listener interface {
-	io.Closer
-
-	Accept() (net.Conn, error)
-}
 
 type listener struct {
 	net.Listener
@@ -96,54 +85,6 @@ func NewProxyService(h host.Host, proxyAddr ma.Multiaddr, dest peer.ID) *ProxySe
 	}
 }
 
-// streamHandler is our function to handle any libp2p-net streams that belong
-// to our protocol. The streams should contain an HTTP request which we need
-// to parse, make on behalf of the original node, and then write the response
-// on the stream, before closing it.
-func streamHandler(stream network.Stream) {
-	// Remember to close the stream when we are done.
-	defer stream.Close()
-
-	// Create a new buffered reader, as ReadRequest needs one.
-	// The buffered reader reads from our stream, on which we
-	// have sent the HTTP request (see ServeHTTP())
-	buf := bufio.NewReader(stream)
-	// Read the HTTP request from the buffer
-	req, err := http.ReadRequest(buf)
-	if err != nil {
-		stream.Reset()
-		log.Println(err)
-		return
-	}
-	defer req.Body.Close()
-
-	// We need to reset these fields in the request
-	// URL as they are not maintained.
-	req.URL.Scheme = "http"
-	hp := strings.Split(req.Host, ":")
-	if len(hp) > 1 && hp[1] == "443" {
-		req.URL.Scheme = "https"
-	} else {
-		req.URL.Scheme = "http"
-	}
-	req.URL.Host = req.Host
-
-	outreq := new(http.Request)
-	*outreq = *req
-
-	// We now make the request
-	fmt.Printf("Making request to %s\n", req.URL)
-	resp, err := http.DefaultTransport.RoundTrip(outreq)
-	if err != nil {
-		stream.Reset()
-		log.Println(err)
-		return
-	}
-
-	// resp.Write writes whatever response we obtained for our
-	// request back to the stream.
-	resp.Write(stream)
-}
 
 // Serve listens on the ProxyService's proxy address. This effectively
 // allows to set the listening address as http proxy.
@@ -151,7 +92,6 @@ func (p *ProxyService) Serve(ctx context.Context) {
 	_, serveArgs, _ := manet.DialArgs(p.proxyAddr)
 	fmt.Println("proxy listening on ", serveArgs)
 	if p.dest != "" {
-		//http.ListenAndServe(serveArgs, p)
 		l, err := net.Listen("tcp", serveArgs)
 		if err != nil {
 			log.Fatalln(err)
@@ -177,63 +117,6 @@ func (p *ProxyService) connHandler(ctx context.Context, conn net.Conn) error {
 	}
 	relay.CloseAfterRelay(conn, stream)
 	return nil
-}
-
-// ServeHTTP implements the http.Handler interface. WARNING: This is the
-// simplest approach to a proxy. Therefore we do not do any of the things
-// that should be done when implementing a reverse proxy (like handling
-// headers correctly). For how to do it properly, see:
-// https://golang.org/src/net/http/httputil/reverseproxy.go?s=3845:3920#L121
-//
-// ServeHTTP opens a stream to the dest peer for every HTTP request.
-// Streams are multiplexed over single connections so, unlike connections
-// themselves, they are cheap to create and dispose of.
-func (p *ProxyService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("proxying request for %s to peer %s\n", r.URL, p.dest.Pretty())
-	// We need to send the request to the remote libp2p peer, so
-	// we open a stream to it
-	stream, err := p.host.NewStream(context.Background(), p.dest, Protocol)
-	// If an error happens, we write an error for response.
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer stream.Close()
-
-	// r.Write() writes the HTTP request to the stream.
-	err = r.Write(stream)
-	if err != nil {
-		stream.Reset()
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-
-	// Now we read the response that was sent from the dest
-	// peer
-	buf := bufio.NewReader(stream)
-	resp, err := http.ReadResponse(buf, r)
-	if err != nil {
-		stream.Reset()
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-
-	// Copy any headers
-	for k, v := range resp.Header {
-		for _, s := range v {
-			w.Header().Add(k, s)
-		}
-	}
-
-	// Write response status and headers
-	w.WriteHeader(resp.StatusCode)
-
-	// Finally copy the body
-	io.Copy(w, resp.Body)
-	resp.Body.Close()
 }
 
 // addAddrToPeerstore parses a peer multiaddress and adds
