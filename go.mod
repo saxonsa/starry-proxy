@@ -10,6 +10,8 @@ require (
 	github.com/libp2p/go-libp2p-core v0.3.1
 	github.com/libp2p/go-libp2p-gostream v0.2.0
 	github.com/libp2p/go-libp2p-secio v0.2.1
+	github.com/multiformats/go-multiaddr v0.2.0
+	github.com/multiformats/go-multiaddr-net v0.1.2
 	go.uber.org/multierr v1.1.0
 )
 
@@ -60,10 +62,8 @@ require (
 	github.com/minio/sha256-simd v0.1.1 // indirect
 	github.com/mr-tron/base58 v1.1.3 // indirect
 	github.com/multiformats/go-base32 v0.0.3 // indirect
-	github.com/multiformats/go-multiaddr v0.2.0 // indirect
 	github.com/multiformats/go-multiaddr-dns v0.2.0 // indirect
 	github.com/multiformats/go-multiaddr-fmt v0.1.0 // indirect
-	github.com/multiformats/go-multiaddr-net v0.1.2 // indirect
 	github.com/multiformats/go-multibase v0.0.1 // indirect
 	github.com/multiformats/go-multihash v0.0.13 // indirect
 	github.com/multiformats/go-multistream v0.1.1 // indirect

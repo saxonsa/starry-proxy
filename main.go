@@ -12,15 +12,32 @@ import (
 	manet "github.com/multiformats/go-multiaddr-net"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 
 	"github.com/libp2p/go-libp2p"
 
 	ma "github.com/multiformats/go-multiaddr"
+
+	"github.com/elazarl/goproxy"
+
+	gostream "github.com/libp2p/go-libp2p-gostream"
+
+	relay "github.com/diandianl/p2p-proxy/relay"
 )
 
 const Protocol = "/proxy-example/0.0.1"
+
+type Listener interface {
+	io.Closer
+
+	Accept() (net.Conn, error)
+}
+
+type listener struct {
+	net.Listener
+}
 
 // makeRandomHost creates a libp2p host with a randomly generated identity.
 // This step is described in depth in other tutorials.
@@ -55,7 +72,16 @@ func NewProxyService(h host.Host, proxyAddr ma.Multiaddr, dest peer.ID) *ProxySe
 	// We let our host know that it needs to handle streams tagged with the
 	// protocol id that we have defined, and then handle them to
 	// our own streamHandling function.
-	h.SetStreamHandler(Protocol, streamHandler)
+	//h.SetStreamHandler(Protocol, streamHandler)
+	go func() {
+		l, err := gostream.Listen(h, Protocol)
+		if err != nil {
+			log.Println(err)
+		}
+		proxy := goproxy.NewProxyHttpServer()
+		s := &http.Server{Handler: proxy}
+		s.Serve(l)
+	}()
 
 	fmt.Println("Proxy server is ready")
 	fmt.Println("libp2p-peer addresses:")
@@ -121,12 +147,36 @@ func streamHandler(stream network.Stream) {
 
 // Serve listens on the ProxyService's proxy address. This effectively
 // allows to set the listening address as http proxy.
-func (p *ProxyService) Serve() {
+func (p *ProxyService) Serve(ctx context.Context) {
 	_, serveArgs, _ := manet.DialArgs(p.proxyAddr)
 	fmt.Println("proxy listening on ", serveArgs)
 	if p.dest != "" {
-		http.ListenAndServe(serveArgs, p)
+		//http.ListenAndServe(serveArgs, p)
+		l, err := net.Listen("tcp", serveArgs)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		listener := &listener{l}
+		go func() {
+			for {
+				conn, err := listener.Accept()
+				if err != nil {
+					log.Fatalln(err)
+				}
+				go p.connHandler(ctx, conn)
+			}
+		}()
 	}
+	<-ctx.Done()
+}
+
+func (p *ProxyService) connHandler(ctx context.Context, conn net.Conn) error {
+	stream, err := p.host.NewStream(ctx, p.dest, Protocol)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	relay.CloseAfterRelay(conn, stream)
+	return nil
 }
 
 // ServeHTTP implements the http.Handler interface. WARNING: This is the
@@ -239,7 +289,7 @@ func main() {
 		}
 		// Create the proxy service and start the http server
 		proxy := NewProxyService(host, proxyAddr, destPeerID)
-		proxy.Serve() // serve hangs forever
+		proxy.Serve(ctx) // serve hangs forever
 	} else {
 		host := makeRandomHost(ctx, *p2pport)
 		// In this case we only need to make sure our host
