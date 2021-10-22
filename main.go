@@ -4,25 +4,25 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
-	manet "github.com/multiformats/go-multiaddr-net"
 	"log"
 	"net"
 	"net/http"
 
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peerstore"
+	gostream "github.com/libp2p/go-libp2p-gostream"
+
 	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr-net"
 
 	"github.com/elazarl/goproxy"
-
-	gostream "github.com/libp2p/go-libp2p-gostream"
 
 	"github.com/diandianl/p2p-proxy/relay"
 )
 
-const Protocol = "/proxy-example/0.0.1"
+const Protocol = "/starry-proxy/0.0.1"
 
 type listener struct {
 	net.Listener
@@ -31,11 +31,11 @@ type listener struct {
 // makeRandomHost creates a libp2p host with a randomly generated identity.
 // This step is described in depth in other tutorials.
 func makeRandomHost(ctx context.Context, port int) host.Host {
-	host, err := libp2p.New(ctx, libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", port)))
+	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", port)))
 	if err != nil {
 		log.Fatalln(err)
 	}
-	return host
+	return h
 }
 
 // ProxyService provides HTTP proxying on top of libp2p by launching an
@@ -69,7 +69,10 @@ func NewProxyService(h host.Host, proxyAddr ma.Multiaddr, dest peer.ID) *ProxySe
 		}
 		proxy := goproxy.NewProxyHttpServer()
 		s := &http.Server{Handler: proxy}
-		s.Serve(l)
+		err = s.Serve(l)
+		if err != nil {
+			return
+		}
 	}()
 
 	fmt.Println("Proxy server is ready")
@@ -103,7 +106,12 @@ func (p *ProxyService) Serve(ctx context.Context) {
 				if err != nil {
 					log.Fatalln(err)
 				}
-				go p.connHandler(ctx, conn)
+				go func() {
+					err := p.connHandler(ctx, conn)
+					if err != nil {
+						log.Println(err)
+					}
+				}()
 			}
 		}()
 	}
@@ -115,7 +123,10 @@ func (p *ProxyService) connHandler(ctx context.Context, conn net.Conn) error {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	relay.CloseAfterRelay(conn, stream)
+	err = relay.CloseAfterRelay(conn, stream)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -163,22 +174,22 @@ func main() {
 	if *destPeer != "" {
 		// We use p2pport+1 in order to not collide if the user
 		// is running the remote peer locally on that port
-		host := makeRandomHost(ctx, *p2pport + 1)
+		h := makeRandomHost(ctx, *p2pport + 1)
 		// Make sure our host knows how to reach destPeer
-		destPeerID := addAddrToPeerstore(host, *destPeer)
+		destPeerID := addAddrToPeerstore(h, *destPeer)
 		proxyAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", *port))
 		if err != nil {
 			log.Fatalln(err)
 		}
 		// Create the proxy service and start the http server
-		proxy := NewProxyService(host, proxyAddr, destPeerID)
+		proxy := NewProxyService(h, proxyAddr, destPeerID)
 		proxy.Serve(ctx) // serve hangs forever
 	} else {
-		host := makeRandomHost(ctx, *p2pport)
+		h := makeRandomHost(ctx, *p2pport)
 		// In this case we only need to make sure our host
 		// knows how to handle incoming proxied requests from
 		// another peer.
-		_ = NewProxyService(host, nil, "")
+		_ = NewProxyService(h, nil, "")
 		<-make(chan struct{}) // hang forever
 	}
 }
