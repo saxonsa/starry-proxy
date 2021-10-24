@@ -1,8 +1,8 @@
 package main
 
 import (
+	"StarryProxy/config"
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -23,7 +23,6 @@ import (
 )
 
 const Protocol = "/starry-proxy/0.0.1"
-
 type listener struct {
 	net.Listener
 }
@@ -165,19 +164,19 @@ func addAddrToPeerstore(h host.Host, addr string) peer.ID {
 func main() {
 	ctx := context.Background()
 
-	destPeer := flag.String("d", "", "destination peer address")
-	port := flag.Int("p", 9900, "proxy port")
-	p2pport := flag.Int("l", 12000, "libp2p listen port")
-	flag.Parse()
+	cfg, err := config.InitConfig()
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	// If we have a destination peer we will start a local server
-	if *destPeer != "" {
+	if cfg.SuperNode.Id != "" {
 		// We use p2pport+1 in order to not collide if the user
 		// is running the remote peer locally on that port
-		h := makeRandomHost(ctx, *p2pport + 1)
+		h := makeRandomHost(ctx, cfg.P2P.Port + 1)
 		// Make sure our host knows how to reach destPeer
-		destPeerID := addAddrToPeerstore(h, *destPeer)
-		proxyAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", *port))
+		destPeerID := addAddrToPeerstore(h, cfg.SuperNode.Id)
+		proxyAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.Proxy.Port))
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -185,7 +184,7 @@ func main() {
 		proxy := NewProxyService(h, proxyAddr, destPeerID)
 		proxy.Serve(ctx) // serve hangs forever
 	} else {
-		h := makeRandomHost(ctx, *p2pport)
+		h := makeRandomHost(ctx, cfg.P2P.Port)
 		// In this case we only need to make sure our host
 		// knows how to handle incoming proxied requests from
 		// another peer.
