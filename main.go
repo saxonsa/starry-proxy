@@ -57,7 +57,7 @@ func main() {
 
 	// If we have a destination peer we will start a local server
 	if cfg.SuperNode.Id != "" {
-		n, err := node.New(ctx, cfg, 0)
+		n, err := node.New(ctx, cfg, node.NORMAL_NODE)
 
 		// Make sure our host knows how to reach destPeer
 		destPeerID := addAddrToPeerstore(n.Host, cfg.SuperNode.Id)
@@ -71,7 +71,7 @@ func main() {
 
 		n.Serve(ctx)
 	} else {
-		n, err := node.New(ctx, cfg, 1)
+		n, err := node.New(ctx, cfg, node.SUPER_NODE)
 		if err != nil {
 			log.Fatalln("Fail to create a node for supernode")
 		}
