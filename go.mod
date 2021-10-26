@@ -6,13 +6,11 @@ require (
 	github.com/diandianl/p2p-proxy v0.0.0-20200314171206-bc170048aca0
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484
 	github.com/libp2p/go-libp2p v0.5.2
-	github.com/libp2p/go-libp2p-autonat-svc v0.1.0
 	github.com/libp2p/go-libp2p-core v0.3.1
 	github.com/libp2p/go-libp2p-gostream v0.2.0
-	github.com/libp2p/go-libp2p-secio v0.2.1
 	github.com/multiformats/go-multiaddr v0.2.0
 	github.com/multiformats/go-multiaddr-net v0.1.2
-	go.uber.org/multierr v1.1.0
+	github.com/yangtizi/cz88 v1.0.3
 )
 
 require (
@@ -44,6 +42,7 @@ require (
 	github.com/libp2p/go-libp2p-mplex v0.2.1 // indirect
 	github.com/libp2p/go-libp2p-nat v0.0.5 // indirect
 	github.com/libp2p/go-libp2p-peerstore v0.1.4 // indirect
+	github.com/libp2p/go-libp2p-secio v0.2.1 // indirect
 	github.com/libp2p/go-libp2p-swarm v0.2.2 // indirect
 	github.com/libp2p/go-libp2p-transport-upgrader v0.1.1 // indirect
 	github.com/libp2p/go-libp2p-yamux v0.2.1 // indirect
@@ -70,15 +69,18 @@ require (
 	github.com/multiformats/go-varint v0.0.5 // indirect
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
+	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/spacemonkeygo/spacelog v0.0.0-20180420211403-2296661a0572 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/whyrusleeping/mafmt v1.2.8 // indirect
 	github.com/whyrusleeping/multiaddr-filter v0.0.0-20160516205228-e903e4adabd7 // indirect
+	github.com/yangtizi/go v1.0.7 // indirect
 	go.opencensus.io v0.22.2 // indirect
-	go.uber.org/atomic v1.4.0 // indirect
-	go.uber.org/zap v1.10.0 // indirect
+	go.uber.org/atomic v1.6.0 // indirect
+	go.uber.org/multierr v1.5.0 // indirect
+	go.uber.org/zap v1.15.0 // indirect
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
-	golang.org/x/net v0.0.0-20190620200207-3b0461eec859 // indirect
-	golang.org/x/sys v0.0.0-20190922100055-0a153f010e69 // indirect
+	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
+	golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd // indirect
 	golang.org/x/text v0.3.2 // indirect
 )
