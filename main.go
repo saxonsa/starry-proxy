@@ -57,7 +57,10 @@ func main() {
 
 	// If we have a destination peer we will start a local server
 	if cfg.SuperNode.Id != "" {
-		n, err := node.New(ctx, cfg, node.NORMAL_NODE)
+		n, err := node.New(ctx, cfg, node.NormalNode)
+		if err != nil {
+			log.Fatalln("Fail to create a node for normal node")
+		}
 
 		// Make sure our host knows how to reach destPeer
 		destPeerID := addAddrToPeerstore(n.Host, cfg.SuperNode.Id)
@@ -69,15 +72,15 @@ func main() {
 		n.ProxyAddr = proxyAddr
 		n.RemotePeer = destPeerID
 
-		n.Serve(ctx)
+		n.Serve(ctx, cfg)
 	} else {
-		n, err := node.New(ctx, cfg, node.SUPER_NODE)
+		n, err := node.New(ctx, cfg, node.SuperNode)
 		if err != nil {
 			log.Fatalln("Fail to create a node for supernode")
 		}
 		// In this case we only need to make sure our host
 		// knows how to handle incoming proxied requests from
 		// another peer.
-		n.Serve(ctx)
+		n.Serve(ctx, cfg)
 	}
 }

@@ -1,6 +1,7 @@
 package node
 
 import (
+	"StarryProxy/cluster"
 	"StarryProxy/config"
 	"StarryProxy/ip"
 	"StarryProxy/protocol"
@@ -23,7 +24,7 @@ import (
 )
 
 type Node interface {
-	Serve(mode Mode)
+	Serve(ctx context.Context)
 
 	ConnectToNet(superNode Node)
 }
@@ -31,8 +32,8 @@ type Node interface {
 type Mode int32
 
 const (
-	NORMAL_NODE	Mode = 0
-	SUPER_NODE	Mode = 1
+	NormalNode Mode = 0
+	SuperNode  Mode = 1
 )
 
 type node struct {
@@ -49,7 +50,12 @@ type node struct {
 	Position ip.Position
 
 	ComputingPower int
+
+	peerList cluster.Cluster
+
+	snList cluster.Cluster
 }
+
 
 type listener struct {
 	net.Listener
@@ -102,7 +108,7 @@ func (n *node) ConnectToNet(superNode Node) {
 
 }
 
-func (n *node) Serve(ctx context.Context) {
+func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	go func() {
 		l, err := gostream.Listen(n.Host, protocol.CommonProtocol)
 		if err != nil {
@@ -122,9 +128,9 @@ func (n *node) Serve(ctx context.Context) {
 		fmt.Printf("%s/ipfs/%s\n", a, peer.Encode(n.Id))
 	}
 
-	if n.Mode == SUPER_NODE {
-		<-make(chan struct{}) // hang forever
-	} else if n.Mode == NORMAL_NODE {
+	if n.Mode == SuperNode {
+		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d",cfg.Proxy.Port), goproxy.NewProxyHttpServer()))
+	} else if n.Mode == NormalNode {
 		n.listenOnProxy(ctx)
 	}
 }
@@ -168,6 +174,3 @@ func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
 	}
 	return nil
 }
-
-
-
