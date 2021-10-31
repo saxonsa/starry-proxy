@@ -118,7 +118,3 @@ func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
 	}
 	return nil
 }
-<<<<<<< HEAD
-
-=======
->>>>>>> a8f338b0f9ff8f56054cf139dfd48c587659ba02
