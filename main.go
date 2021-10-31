@@ -3,13 +3,14 @@ package main
 import (
 	"StarryProxy/config"
 	"StarryProxy/node"
+	"StarryProxy/peer"
 
 	"context"
 	"fmt"
 	"log"
 
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
+	libp2ppeer "github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -18,7 +19,7 @@ import (
 // addAddrToPeerstore parses a peer multiaddress and adds
 // it to the given host's peerstore, so it knows how to
 // contact it. It returns the peer ID of the remote peer.
-func addAddrToPeerstore(h host.Host, addr string) peer.ID {
+func addAddrToPeerstore(h host.Host, addr string) libp2ppeer.ID {
 	// The following code extracts target's the peer ID from the
 	// given multiaddress
 	ipfsaddr, err := ma.NewMultiaddr(addr)
@@ -30,7 +31,7 @@ func addAddrToPeerstore(h host.Host, addr string) peer.ID {
 		log.Fatalln(err)
 	}
 
-	peerid, err := peer.Decode(pid)
+	peerid, err := libp2ppeer.Decode(pid)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -38,7 +39,7 @@ func addAddrToPeerstore(h host.Host, addr string) peer.ID {
 	// Decapsulate the /ipfs/<peerID> part from the target
 	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
 	targetPeerAddr, _ := ma.NewMultiaddr(
-		fmt.Sprintf("/ipfs/%s", peer.Encode(peerid)))
+		fmt.Sprintf("/ipfs/%s", libp2ppeer.Encode(peerid)))
 	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
 
 	// We have a peer ID and a targetAddr so we add
@@ -57,27 +58,35 @@ func main() {
 
 	// If we have a destination peer we will start a local server
 	if cfg.SuperNode.Id != "" {
-		n, err := node.New(ctx, cfg, node.NORMAL_NODE)
+		p, err := peer.New(ctx, cfg, peer.NormalNode)
+		if err != nil {
+			log.Fatalln("Fail to create a peer for normal peer")
+		}
 
 		// Make sure our host knows how to reach destPeer
-		destPeerID := addAddrToPeerstore(n.Host, cfg.SuperNode.Id)
+		destPeerID := addAddrToPeerstore(p.Host, cfg.SuperNode.Id)
 		proxyAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.Proxy.Port))
 		if err != nil {
 			log.Fatalln(err)
 		}
 
-		n.ProxyAddr = proxyAddr
-		n.RemotePeer = destPeerID
+		p.ProxyAddr = proxyAddr
+		p.RemotePeer = destPeerID
 
-		n.Serve(ctx)
-	} else {
-		n, err := node.New(ctx, cfg, node.SUPER_NODE)
+		n, err := node.New(*p)
 		if err != nil {
-			log.Fatalln("Fail to create a node for supernode")
+			log.Fatalln(err)
+		}
+		n.Serve(ctx, cfg)
+	} else {
+		p, err := peer.New(ctx, cfg, peer.SuperNode)
+		if err != nil {
+			log.Fatalln("Fail to create a peer for supernode")
 		}
 		// In this case we only need to make sure our host
 		// knows how to handle incoming proxied requests from
 		// another peer.
-		n.Serve(ctx)
+		n, err := node.New(*p)
+		n.Serve(ctx, cfg)
 	}
 }

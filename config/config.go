@@ -7,6 +7,11 @@ import (
 	"log"
 )
 
+type Position struct {
+	Province string `json:"Province"`
+	City string `json:"City"`
+}
+
 type Config struct {
 	Version string `json:"Version"`
 
@@ -15,6 +20,8 @@ type Config struct {
 	Proxy Proxy `json:"Proxy"`
 
 	P2P P2P `json:"P2P"`
+
+	Position Position `json:"Position"`
 }
 
 type Node struct {
@@ -39,8 +46,10 @@ func InitConfig() (*Config, error) {
 	err = json.Unmarshal(bytes, &cfg)
 
 	flag.StringVar(&cfg.SuperNode.Id, "snid", "", "supernode id used to enter the p2p net")
-	flag.IntVar(&cfg.Proxy.Port, "proxy", 5019, "proxy port")
-	flag.IntVar(&cfg.P2P.Port, "p2p", 10001, "p2p port")
+	flag.IntVar(&cfg.Proxy.Port, "proxy", cfg.Proxy.Port, "proxy port")
+	flag.IntVar(&cfg.P2P.Port, "p2p", cfg.P2P.Port, "p2p port")
+	flag.StringVar(&cfg.Position.Province, "province", cfg.Position.Province, "province")
+	flag.StringVar(&cfg.Position.City, "city", cfg.Position.City, "city")
 	flag.Parse()
 
 	return &cfg, nil

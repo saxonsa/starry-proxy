@@ -8,5 +8,9 @@
   },
   "P2P": {
     "Port": 10001
+  },
+  "Position": {
+    "Province": "",
+    "City": ""
   }
 }
