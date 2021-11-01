@@ -1,10 +1,12 @@
 package cluster
 
 import (
+	"log"
+
 	"StarryProxy/config"
 	"StarryProxy/peer"
+
 	libp2ppeer "github.com/libp2p/go-libp2p-core/peer"
-	"log"
 )
 
 type Cluster interface {

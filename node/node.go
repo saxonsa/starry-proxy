@@ -50,11 +50,13 @@ func (n *node) ConnectToNet(superNode Node) {
 }
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
+	// start proxy service
 	go func() {
 		l, err := gostream.Listen(n.self.Host, protocol.CommonProtocol)
 		if err != nil {
 			log.Println(err)
 		}
+		defer l.Close()
 		proxy := goproxy.NewProxyHttpServer()
 		s := &http.Server{Handler: proxy}
 		err = s.Serve(l)
@@ -72,6 +74,15 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	if n.self.Mode == peer.SuperNode {
 		// create a cluster
 		n.snList, _ = cluster.New(n.self, cfg)
+
+		// start a service waiting for the node to enter the cluster
+		//go func() {
+		//	l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
+		//	if err != nil {
+		//		log.Println(err)
+		//	}
+		//
+		//}()
 
 		// start self-proxy
 		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d",cfg.Proxy.Port), goproxy.NewProxyHttpServer()))
