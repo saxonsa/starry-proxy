@@ -4,11 +4,8 @@ import (
 	"StarryProxy/config"
 	"StarryProxy/node"
 	"StarryProxy/peer"
-	"StarryProxy/protocol"
-	"bufio"
 	"context"
 	"fmt"
-	gostream "github.com/libp2p/go-libp2p-gostream"
 	"log"
 
 	"github.com/libp2p/go-libp2p-core/host"
@@ -80,11 +77,7 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		conn, _ := gostream.Dial(ctx, p.Host, destPeerID, protocol.NewNodeEntryProtocol)
-		conn.Write([]byte("question?\n"))
-		reader := bufio.NewReader(conn)
-		msg, _ := reader.ReadString('\n')
-		fmt.Println(msg)
+		n.ConnectToNet(ctx, destPeerID)
 
 		n.Serve(ctx, cfg)
 	} else {

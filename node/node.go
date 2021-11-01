@@ -25,7 +25,7 @@ import (
 type Node interface {
 	Serve(ctx context.Context, cfg *config.Config)
 
-	ConnectToNet(superNode Node)
+	ConnectToNet(ctx context.Context, superNode libp2ppeer.ID)
 }
 
 type node struct {
@@ -46,8 +46,12 @@ func New(peer peer.Peer) (Node, error) {
 	return &node, nil
 }
 
-func (n *node) ConnectToNet(superNode Node) {
-
+func (n *node) ConnectToNet(ctx context.Context, snid libp2ppeer.ID, ) {
+	conn, _ := gostream.Dial(ctx, n.self.Host, snid, protocol.NewNodeEntryProtocol)
+	conn.Write([]byte("question?\n"))
+	reader := bufio.NewReader(conn)
+	msg, _ := reader.ReadString('\n')
+	fmt.Print(msg)
 }
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
@@ -90,7 +94,7 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 
 				reader := bufio.NewReader(conn)
 				msg, _ := reader.ReadString('\n')
-				fmt.Println(msg)
+				fmt.Print(msg)
 				conn.Write([]byte("answer!\n"))
 			}
 		}()
