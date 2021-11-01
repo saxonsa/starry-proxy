@@ -4,9 +4,11 @@ import (
 	"StarryProxy/config"
 	"StarryProxy/node"
 	"StarryProxy/peer"
-
+	"StarryProxy/protocol"
+	"bufio"
 	"context"
 	"fmt"
+	gostream "github.com/libp2p/go-libp2p-gostream"
 	"log"
 
 	"github.com/libp2p/go-libp2p-core/host"
@@ -77,6 +79,13 @@ func main() {
 		if err != nil {
 			log.Fatalln(err)
 		}
+
+		conn, _ := gostream.Dial(ctx, p.Host, destPeerID, protocol.NewNodeEntryProtocol)
+		conn.Write([]byte("question?\n"))
+		reader := bufio.NewReader(conn)
+		msg, _ := reader.ReadString('\n')
+		fmt.Println(msg)
+
 		n.Serve(ctx, cfg)
 	} else {
 		p, err := peer.New(ctx, cfg, peer.SuperNode)
@@ -87,6 +96,7 @@ func main() {
 		// knows how to handle incoming proxied requests from
 		// another peer.
 		n, err := node.New(*p)
+
 		n.Serve(ctx, cfg)
 	}
 }

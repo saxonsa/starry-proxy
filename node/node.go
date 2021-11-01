@@ -5,6 +5,7 @@ import (
 	"StarryProxy/config"
 	"StarryProxy/peer"
 	"StarryProxy/protocol"
+	"bufio"
 
 	"context"
 	"fmt"
@@ -76,13 +77,23 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 		n.snList, _ = cluster.New(n.self, cfg)
 
 		// start a service waiting for the node to enter the cluster
-		//go func() {
-		//	l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
-		//	if err != nil {
-		//		log.Println(err)
-		//	}
-		//
-		//}()
+		go func() {
+			l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
+			if err != nil {
+				log.Println(err)
+			}
+			defer l.Close()
+
+			for {
+				conn, _ := l.Accept()
+				defer conn.Close()
+
+				reader := bufio.NewReader(conn)
+				msg, _ := reader.ReadString('\n')
+				fmt.Println(msg)
+				conn.Write([]byte("answer!\n"))
+			}
+		}()
 
 		// start self-proxy
 		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d",cfg.Proxy.Port), goproxy.NewProxyHttpServer()))
