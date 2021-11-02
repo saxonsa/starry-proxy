@@ -9,6 +9,11 @@ import (
 	libp2ppeer "github.com/libp2p/go-libp2p-core/peer"
 )
 
+const (
+	PeerList = 0
+	SNList = 1
+)
+
 type Cluster interface {
 	GetClusterSize() int
 }
@@ -25,13 +30,13 @@ type cluster struct {
 	position Position
 }
 
-func New(p peer.Peer, cfg *config.Config) (Cluster, error) {
+func New(p peer.Peer, cfg *config.Config, mode int) (Cluster, error) {
 	position := Position{province: cfg.Position.Province, city: cfg.Position.City}
 	cluster := cluster{snid: p.Id, nodes: make(map[libp2ppeer.ID]peer.Peer), position: position}
 	cluster.nodes[p.Id] = p
 
 	// generate cluster id
-	cluster.id = clusterName(shortID(p.Id))
+	cluster.id = clusterName(shortID(p.Id), mode)
 
 	log.Println(cluster.id)
 
@@ -47,6 +52,10 @@ func shortID(p libp2ppeer.ID) string {
 	return pretty[len(pretty)-8:]
 }
 
-func clusterName(clusterId string) string {
-	return "cluster:" + clusterId
+func clusterName(clusterId string, mode int) string {
+	if mode == PeerList {
+		return "PeerCluster:" + clusterId
+	} else {
+		return "SNCluster:" + clusterId
+	}
 }

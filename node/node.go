@@ -69,19 +69,7 @@ func (n *node) ConnectToNet(ctx context.Context, snid libp2ppeer.ID) {
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	// start proxy service
-	go func() {
-		l, err := gostream.Listen(n.self.Host, protocol.CommonProtocol)
-		if err != nil {
-			log.Println(err)
-		}
-		defer l.Close()
-		proxy := goproxy.NewProxyHttpServer()
-		s := &http.Server{Handler: proxy}
-		err = s.Serve(l)
-		if err != nil {
-			return
-		}
-	}()
+	go n.StartProxyService()
 
 	fmt.Println("Proxy server is ready")
 	fmt.Println("libp2p-peer addresses:")
@@ -90,35 +78,12 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	}
 
 	if n.self.Mode == peer.SuperNode {
-		// create a cluster
-		n.snList, _ = cluster.New(n.self, cfg)
+		// init 2 clusters
+		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList)
+		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
 
 		// start a service waiting for the node to enter the cluster
-		go func() {
-			l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
-			if err != nil {
-				log.Println(err)
-			}
-			defer l.Close()
-
-			// handle peer connection
-			for {
-				conn, _ := l.Accept()
-				defer conn.Close()
-
-				go func() {
-					// receive peer information
-					peerInfo := peerInfo{}
-					buffer := make([]byte, 1024)
-					len, err := conn.Read(buffer)
-					err = json.Unmarshal(buffer[:len], &peerInfo)
-					if err != nil {
-						log.Printf("fail to convert json to struct format: %s", err)
-					}
-					conn.Write([]byte("answer!\n"))
-				}()
-			}
-		}()
+		go n.StartNewNodeEntryService()
 
 		// start self-proxy
 		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d",cfg.Proxy.Port), goproxy.NewProxyHttpServer()))
@@ -164,4 +129,45 @@ func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
 		return err
 	}
 	return nil
+}
+
+func (n *node) StartProxyService() {
+	l, err := gostream.Listen(n.self.Host, protocol.CommonProtocol)
+	if err != nil {
+		log.Println(err)
+	}
+	defer l.Close()
+	proxy := goproxy.NewProxyHttpServer()
+	s := &http.Server{Handler: proxy}
+	err = s.Serve(l)
+	if err != nil {
+		return
+	}
+}
+
+func (n *node) StartNewNodeEntryService() {
+	l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
+	if err != nil {
+		log.Println(err)
+	}
+	defer l.Close()
+
+	// handle peer connection
+	for {
+		conn, _ := l.Accept()
+		defer conn.Close()
+
+		go func() {
+			// receive peer information
+			peerInfo := peerInfo{}
+			buffer := make([]byte, 1024)
+			len, err := conn.Read(buffer)
+			err = json.Unmarshal(buffer[:len], &peerInfo)
+			if err != nil {
+				log.Printf("fail to convert json to struct format: %s", err)
+			}
+
+			conn.Write([]byte("answer!\n"))
+		}()
+	}
 }
