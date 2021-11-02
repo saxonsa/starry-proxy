@@ -77,18 +77,20 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		n.ConnectToNet(ctx, destPeerID)
+		n.ConnectToNet(ctx, cfg, destPeerID)
 
 		n.Serve(ctx, cfg)
 	} else {
 		p, err := peer.New(ctx, cfg, peer.SuperNode)
 		if err != nil {
-			log.Fatalln("Fail to create a peer for supernode")
+			log.Fatalln("Fail to create a peer for the first node")
 		}
 		// In this case we only need to make sure our host
 		// knows how to handle incoming proxied requests from
 		// another peer.
 		n, err := node.New(*p)
+
+		n.ConnectToNet(ctx, cfg, "")
 
 		n.Serve(ctx, cfg)
 	}

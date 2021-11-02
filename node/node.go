@@ -25,7 +25,7 @@ import (
 type Node interface {
 	Serve(ctx context.Context, cfg *config.Config)
 
-	ConnectToNet(ctx context.Context, superNode libp2ppeer.ID)
+	ConnectToNet(ctx context.Context, cfg *config.Config, superNode libp2ppeer.ID)
 }
 
 type node struct {
@@ -46,12 +46,21 @@ func New(peer peer.Peer) (Node, error) {
 	return &node, nil
 }
 
+// msg sent from peer to super node when entry the p2p net
 type peerInfo struct {
 	Pid string
 	Position ip.Position
 }
 
-func (n *node) ConnectToNet(ctx context.Context, snid libp2ppeer.ID) {
+func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
+	// The first node entered the p2p net
+	if snid == "" {
+		// init 2 clusters
+		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList)
+		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
+		return
+	}
+
 	// build a stream which tags "NewNodeEntryProtocol"
 	conn, _ := gostream.Dial(ctx, n.self.Host, snid, protocol.NewNodeEntryProtocol)
 
@@ -78,9 +87,6 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	}
 
 	if n.self.Mode == peer.SuperNode {
-		// init 2 clusters
-		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList)
-		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
 
 		// start a service waiting for the node to enter the cluster
 		go n.StartNewNodeEntryService()
@@ -167,6 +173,28 @@ func (n *node) StartNewNodeEntryService() {
 				log.Printf("fail to convert json to struct format: %s", err)
 			}
 
+			// put the normal node in the right cluster
+			if peerInfo.Position == n.peerList.GetClusterPosition() {
+				// at the same position - put in the same cluster - conn directly to sn
+				err := n.peerList.AddPeer(peer.Peer{
+					Id: libp2ppeer.ID(peerInfo.Pid),
+					Position: peerInfo.Position,
+					Mode: peer.NormalNode,
+				})
+				if err != nil {
+					fmt.Printf("fail to add a peer to peerList: %s", err)
+				}
+			} else {
+				// find if the supernode of the right cluster exists
+				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
+				if p == nil {
+					// not found - assign self as a supernode
+
+				} else {
+					// found
+
+				}
+			}
 			conn.Write([]byte("answer!\n"))
 		}()
 	}
