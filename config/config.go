@@ -1,16 +1,13 @@
 package config
 
 import (
+	"StarryProxy/ip"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
 	"log"
 )
 
-type Position struct {
-	Province string `json:"Province"`
-	City string `json:"City"`
-}
 
 type Config struct {
 	Version string `json:"Version"`
@@ -21,7 +18,7 @@ type Config struct {
 
 	P2P P2P `json:"P2P"`
 
-	Position Position `json:"Position"`
+	Position ip.Position `json:"Position"`
 }
 
 type Node struct {
@@ -44,6 +41,13 @@ func InitConfig() (*Config, error) {
 		return nil, err
 	}
 	err = json.Unmarshal(bytes, &cfg)
+
+	// get peer position
+	position, err := ip.GetLocalPosition()
+	if err != nil {
+		log.Printf("Fail to get local position from cz88 api: %s", err)
+	}
+	cfg.Position = position
 
 	flag.StringVar(&cfg.SuperNode.Id, "snid", "", "supernode id used to enter the p2p net")
 	flag.IntVar(&cfg.Proxy.Port, "proxy", cfg.Proxy.Port, "proxy port")

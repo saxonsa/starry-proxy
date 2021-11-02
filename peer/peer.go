@@ -44,18 +44,11 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		return nil, err
 	}
 
-	// get peer position
-	position, err := ip.GetLocalPosition()
-	if err != nil {
-		log.Fatalln("Fail to get local position for peer")
-		return nil, err
-	}
-
 	return &Peer{
 		Mode:     mode,
 		Host:     h,
 		Id: 	  h.ID(),
-		Position: position,
+		Position: cfg.Position,
 	}, nil
 }
 

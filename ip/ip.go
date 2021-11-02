@@ -8,8 +8,8 @@ import (
 )
 
 type Position struct {
-	Province string `json:"province"`
-	City string `json:"city"`
+	Province string `json:"Province"`
+	City string `json:"City"`
 }
 
 type APP struct {
