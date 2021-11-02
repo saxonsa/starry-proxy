@@ -10,7 +10,6 @@ import (
 type Position struct {
 	Province string `json:"province"`
 	City string `json:"city"`
-	Isp  string `json:"isp"`
 }
 
 type APP struct {

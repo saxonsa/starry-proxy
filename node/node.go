@@ -1,25 +1,25 @@
 package node
 
 import (
-	"StarryProxy/cluster"
-	"StarryProxy/config"
-	"StarryProxy/peer"
-	"StarryProxy/protocol"
+	"StarryProxy/ip"
 	"bufio"
-
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 
+	"StarryProxy/cluster"
+	"StarryProxy/config"
+	"StarryProxy/peer"
+	"StarryProxy/protocol"
+
 	"github.com/diandianl/p2p-proxy/relay"
 	"github.com/elazarl/goproxy"
 	libp2ppeer "github.com/libp2p/go-libp2p-core/peer"
-
 	gostream "github.com/libp2p/go-libp2p-gostream"
 	manet "github.com/multiformats/go-multiaddr-net"
-
 )
 
 type Node interface {
@@ -46,9 +46,22 @@ func New(peer peer.Peer) (Node, error) {
 	return &node, nil
 }
 
-func (n *node) ConnectToNet(ctx context.Context, snid libp2ppeer.ID, ) {
+type peerInfo struct {
+	Pid string
+	Position ip.Position
+}
+
+func (n *node) ConnectToNet(ctx context.Context, snid libp2ppeer.ID) {
+	// build a stream which tags "NewNodeEntryProtocol"
 	conn, _ := gostream.Dial(ctx, n.self.Host, snid, protocol.NewNodeEntryProtocol)
-	conn.Write([]byte("question?\n"))
+
+	// send self peer Info to supernode
+	peerInfo := peerInfo{Pid: n.self.Id.Pretty(), Position: n.self.Position}
+	peerInfoJson, _ := json.Marshal(peerInfo)
+	fmt.Println(string(peerInfoJson))
+	conn.Write(peerInfoJson)
+
+	// recv cluster information from supernode
 	reader := bufio.NewReader(conn)
 	msg, _ := reader.ReadString('\n')
 	fmt.Print(msg)
@@ -88,14 +101,22 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 			}
 			defer l.Close()
 
+			// handle peer connection
 			for {
 				conn, _ := l.Accept()
 				defer conn.Close()
 
-				reader := bufio.NewReader(conn)
-				msg, _ := reader.ReadString('\n')
-				fmt.Print(msg)
-				conn.Write([]byte("answer!\n"))
+				go func() {
+					// receive peer information
+					peerInfo := peerInfo{}
+					buffer := make([]byte, 1024)
+					len, err := conn.Read(buffer)
+					err = json.Unmarshal(buffer[:len], &peerInfo)
+					if err != nil {
+						log.Printf("fail to convert json to struct format: %s", err)
+					}
+					conn.Write([]byte("answer!\n"))
+				}()
 			}
 		}()
 
