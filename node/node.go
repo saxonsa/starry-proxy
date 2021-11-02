@@ -184,15 +184,18 @@ func (n *node) StartNewNodeEntryService() {
 				if err != nil {
 					fmt.Printf("fail to add a peer to peerList: %s", err)
 				}
+
+				// 如果supernode没有remotepeer, 立即将连过来的这个作为remote peer
+				//if n.self.RemotePeer =
 			} else {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
 				if p == nil {
 					// not found - assign self as a supernode
-
+					fmt.Println("not found that sn node")
 				} else {
 					// found
-
+					fmt.Println("found node")
 				}
 			}
 			conn.Write([]byte("answer!\n"))

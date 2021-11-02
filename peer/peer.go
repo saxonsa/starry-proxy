@@ -16,9 +16,8 @@ import (
 type Mode int32
 
 const (
-	NeoNode = 0
-	SuperNode = 1
-	NormalNode = 2
+	SuperNode = 0
+	NormalNode = 1
 )
 
 type Peer struct {
@@ -50,6 +49,7 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		Host:     h,
 		Id: 	  h.ID(),
 		Position: cfg.Position,
+		RemotePeer: "",
 	}, nil
 }
 
