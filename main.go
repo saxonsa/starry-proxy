@@ -47,6 +47,7 @@ func main() {
 
 		n.ConnectToNet(ctx, cfg, "")
 
+		// start service
 		n.Serve(ctx, cfg)
 	}
 }
