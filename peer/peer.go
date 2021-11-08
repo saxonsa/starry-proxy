@@ -108,8 +108,14 @@ func AddAddrToPeerstore(h host.Host, addr string) peer.ID {
 		fmt.Sprintf("/ipfs/%s", peer.Encode(peerid)))
 	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
 
+	fmt.Printf("peerid: %s\n", peerid)
+	fmt.Printf("targetAddr: %s\n", targetAddr)
+
 	// We have a peer ID and a targetAddr so we add
 	// it to the peerstore so LibP2P knows how to contact it
 	h.Peerstore().AddAddr(peerid, targetAddr, peerstore.PermanentAddrTTL)
+	for index, value := range h.Peerstore().Peers() {
+		fmt.Printf("peer %d, %s\n", index, value)
+	}
 	return peerid
 }
