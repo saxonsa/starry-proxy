@@ -47,7 +47,6 @@ func main() {
 
 		n.ConnectToNet(ctx, cfg, "")
 
-
 		n.Serve(ctx, cfg)
 	}
 }
