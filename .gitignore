@@ -11,6 +11,10 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+#goland env
 .idea/
+
 # app key
 env.json
+
+go.sum
