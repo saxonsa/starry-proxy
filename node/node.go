@@ -2,7 +2,6 @@ package node
 
 import (
 	"StarryProxy/ip"
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -74,19 +73,25 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	peerInfoJson, _ := json.Marshal(peerInfo)
 	conn.Write(peerInfoJson)
 
-	msg := message{}
-	buffer := make([]byte, 1024)
-	len, err := conn.Read(buffer)
-	err = json.Unmarshal(buffer[:len], &msg)
-	if err != nil {
-		log.Printf("fail to convert json to struct format: %s", err)
-	}
-	log.Println(msg.Operand)
+	for {
+		msg := message{}
+		buffer := make([]byte, 1024)
+		len, err := conn.Read(buffer)
+		err = json.Unmarshal(buffer[:len], &msg)
+		if err != nil {
+			log.Printf("fail to convert json to struct format: %s", err)
+		}
 
-	// recv cluster information from supernode
-	reader := bufio.NewReader(conn)
-	kk, _ := reader.ReadString('\n')
-	fmt.Print(kk)
+		switch msg.Operand {
+			case 0: {
+				return
+			}
+			case 1: {
+
+				log.Println(msg.Operand)
+			}
+		}
+	}
 }
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
@@ -216,7 +221,9 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 					fmt.Println("found node")
 				}
 			}
-			conn.Write([]byte("answer!\n"))
+			message := message{Operand: 0}
+			msgJson, _ := json.Marshal(message)
+			conn.Write(msgJson)
 		}()
 	}
 }
