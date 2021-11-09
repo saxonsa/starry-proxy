@@ -33,9 +33,8 @@ type node struct {
 
 	peerList cluster.Cluster
 
-	snList	cluster.Cluster
+	snList cluster.Cluster
 }
-
 
 type listener struct {
 	net.Listener
@@ -77,8 +76,11 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 }
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
-	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
+	// 启动proxy service, 监听 gostream <httpProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
+
+	// 启动assign self as supernode service, 监听<AssignSelfAsSupernodeProtocol>, 收到后将自己置为supernode
+	go n.StartAssignSelfAsSupernodeService(ctx)
 
 	fmt.Println("Proxy server is ready")
 	fmt.Println("libp2p-peer addresses:")
@@ -88,7 +90,7 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 
 	if n.self.Mode == peer.SuperNode {
 		// start a service waiting for the node to enter the cluster
-		go n.StartNewNodeEntryService()
+		go n.StartSupernodeService(ctx)
 	}
 	// 监听设置好的proxy端口, 将http请求转发到这个端口上, 然后端口将stream转发给remote proxy
 	// 如果没有remote peer, 自己处理端口的请求
@@ -129,7 +131,7 @@ func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
 	}
 
 	// 将stream转发给remote peer
-	stream, err := n.self.Host.NewStream(ctx, n.self.RemotePeer, protocol.CommonProtocol)
+	stream, err := n.self.Host.NewStream(ctx, n.self.RemotePeer, protocol.HTTPProxyProtocol)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -141,7 +143,7 @@ func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
 }
 
 func (n *node) StartProxyService() {
-	l, err := gostream.Listen(n.self.Host, protocol.CommonProtocol)
+	l, err := gostream.Listen(n.self.Host, protocol.HTTPProxyProtocol)
 	if err != nil {
 		log.Println(err)
 	}
@@ -154,7 +156,20 @@ func (n *node) StartProxyService() {
 	}
 }
 
-func (n *node) StartNewNodeEntryService() {
+func (n *node) StartAssignSelfAsSupernodeService(ctx context.Context) {
+	l, err := gostream.Listen(n.self.Host, protocol.AssignSelfAsSupernodeProtocol)
+	if err != nil {
+		log.Println(err)
+	}
+	defer l.Close()
+
+	//// assign self as a supernode - add supernode service
+	//n.StartSupernodeService(ctx)
+	//
+	//n.self.Mode = peer.SuperNode
+}
+
+func (n *node) StartNewNodeEntryService(ctx context.Context) {
 	l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
 	if err != nil {
 		log.Println(err)
@@ -180,9 +195,9 @@ func (n *node) StartNewNodeEntryService() {
 			if peerInfo.Position == n.peerList.GetClusterPosition() {
 				// at the same position - put in the same cluster - conn directly to sn
 				err := n.peerList.AddPeer(peer.Peer{
-					Id: libp2ppeer.ID(peerInfo.PeerAddr),
+					Id:       libp2ppeer.ID(peerInfo.PeerAddr),
 					Position: peerInfo.Position,
-					Mode: peer.NormalNode,
+					Mode:     peer.NormalNode,
 				})
 				if err != nil {
 					fmt.Printf("fail to add a peer to peerList: %s", err)
@@ -196,8 +211,13 @@ func (n *node) StartNewNodeEntryService() {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
 				if p == nil {
+					log.Println("assign as a supernode")
 					// not found - assign self as a supernode
-					fmt.Println("not found that sn node")
+					_, err := n.self.Host.NewStream(ctx, peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr), protocol.AssignSelfAsSupernodeProtocol)
+					if err != nil {
+						log.Println(err)
+						log.Println("node fail to assign the new node as a supernode")
+					}
 				} else {
 					// found
 					fmt.Println("found node")
@@ -206,4 +226,9 @@ func (n *node) StartNewNodeEntryService() {
 			conn.Write([]byte("answer!\n"))
 		}()
 	}
+}
+
+func (n *node) StartSupernodeService(ctx context.Context) {
+	fmt.Println("start supernode service")
+	n.StartNewNodeEntryService(ctx)
 }
