@@ -51,6 +51,10 @@ type peerInfo struct {
 	Position ip.Position
 }
 
+const (
+	AssignSelfAsSupernodeProtocol = "/starry-proxy/assignSupernode/0.0.1"
+)
+
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
 	// The first node entered the p2p net
 	if snid == "" {
@@ -157,11 +161,13 @@ func (n *node) StartProxyService() {
 }
 
 func (n *node) StartAssignSelfAsSupernodeService(ctx context.Context) {
-	l, err := gostream.Listen(n.self.Host, protocol.AssignSelfAsSupernodeProtocol)
+	l, err := gostream.Listen(n.self.Host, AssignSelfAsSupernodeProtocol)
 	if err != nil {
 		log.Println(err)
 	}
 	defer l.Close()
+
+	fmt.Println("test protocol")
 
 	//// assign self as a supernode - add supernode service
 	//n.StartSupernodeService(ctx)
@@ -213,7 +219,7 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				if p == nil {
 					log.Println("assign as a supernode")
 					// not found - assign self as a supernode
-					_, err := n.self.Host.NewStream(ctx, peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr), protocol.AssignSelfAsSupernodeProtocol)
+					_, err := n.self.Host.NewStream(ctx, peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr), AssignSelfAsSupernodeProtocol)
 					if err != nil {
 						log.Println(err)
 						log.Println("node fail to assign the new node as a supernode")
