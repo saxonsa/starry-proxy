@@ -80,6 +80,8 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
 
+	go n.StartAssignSelfAsSupernodeService()
+
 	fmt.Println("Proxy server is ready")
 	fmt.Println("libp2p-peer addresses:")
 	for _, a := range n.self.Host.Addrs() {
@@ -88,7 +90,7 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 
 	if n.self.Mode == peer.SuperNode {
 		// start a service waiting for the node to enter the cluster
-		go n.StartNewNodeEntryService()
+		go n.StartNewNodeEntryService(ctx)
 	}
 	// 监听设置好的proxy端口, 将http请求转发到这个端口上, 然后端口将stream转发给remote proxy
 	// 如果没有remote peer, 自己处理端口的请求
@@ -156,7 +158,17 @@ func (n *node) StartProxyService() {
 	}
 }
 
-func (n *node) StartNewNodeEntryService() {
+func (n *node) StartAssignSelfAsSupernodeService() {
+	l, err := gostream.Listen(n.self.Host, protocol.AssignSelfAsSupernode)
+	if err != nil {
+		log.Println(err)
+	}
+
+	defer l.Close()
+	fmt.Println("start assign self as supernode service")
+}
+
+func (n *node) StartNewNodeEntryService(ctx context.Context) {
 	l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
 	if err != nil {
 		log.Println(err)
@@ -198,8 +210,9 @@ func (n *node) StartNewNodeEntryService() {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
 				if p == nil {
+					RemotePeer := peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
 					// not found - assign self as a supernode
-					fmt.Println("not found that sn node")
+					gostream.Dial(ctx, n.self.Host, RemotePeer, protocol.AssignSelfAsSupernode)
 				} else {
 					// found
 					fmt.Println("found node")
