@@ -7,7 +7,8 @@ const (
 )
 
 const (
-
+	EXIT = 100
+	AssignSelfAsSupernode = 101
 )
 
 

@@ -22,7 +22,7 @@ import (
 )
 
 type Node interface {
-	Serve(ctx context.Context, cfg *config.Config)
+	Serve(ctx context.Context)
 
 	ConnectToNet(ctx context.Context, cfg *config.Config, superNode libp2ppeer.ID)
 }
@@ -83,18 +83,19 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 		}
 
 		switch msg.Operand {
-			case 0: {
+			case protocol.EXIT: {
 				return
 			}
-			case 1: {
-
-				log.Println(msg.Operand)
+			case protocol.AssignSelfAsSupernode: {
+				go n.StartNewNodeEntryService(ctx)
+				n.self.Mode = peer.SuperNode
+				n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
 			}
 		}
 	}
 }
 
-func (n *node) Serve(ctx context.Context, cfg *config.Config) {
+func (n *node) Serve(ctx context.Context) {
 	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
 
@@ -213,7 +214,7 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
 				if p == nil {
 					peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
-					message := message{Operand: 1}
+					message := message{Operand: protocol.AssignSelfAsSupernode}
 					msgJson, _ := json.Marshal(message)
 					conn.Write(msgJson)
 				} else {
@@ -221,7 +222,7 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 					fmt.Println("found node")
 				}
 			}
-			message := message{Operand: 0}
+			message := message{Operand: protocol.EXIT}
 			msgJson, _ := json.Marshal(message)
 			conn.Write(msgJson)
 		}()
