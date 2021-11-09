@@ -104,32 +104,30 @@ func (n *node) listenOnProxy(ctx context.Context) {
 	}
 	listener := &listener{l}
 
-	if n.self.RemotePeer != "" {
-		go func() {
-			for {
-				conn, err := listener.Accept()
-				if err != nil {
-					log.Fatalln(err)
-				}
-				go func() {
-					err := n.connHandler(ctx, conn)
-					if err != nil {
-						log.Println(err)
-					}
-				}()
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Fatalln(err)
 			}
-		}()
-	} else {
-		// no remote peer to relay the proxy requests
-		err := http.Serve(l, goproxy.NewProxyHttpServer())
-		if err != nil {
-			log.Println(err)
+			go func() {
+				err := n.connHandler(ctx, conn)
+				if err != nil {
+					log.Println(err)
+				}
+			}()
 		}
-	}
+	}()
+
 	<-ctx.Done()
 }
 
 func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
+	// 如果是刚进来的supernode, 不支持proxy, 需要等待新的node加入
+	if n.self.RemotePeer == "" {
+		return nil
+	}
+
 	// 将stream转发给remote peer
 	stream, err := n.self.Host.NewStream(ctx, n.self.RemotePeer, protocol.CommonProtocol)
 	if err != nil {
@@ -190,7 +188,7 @@ func (n *node) StartNewNodeEntryService() {
 					fmt.Printf("fail to add a peer to peerList: %s", err)
 				}
 
-				// 如果supernode没有remotepeer, 立即将连过来的这个作为remote peer
+				// 如果supernode没有remote peer, 立即将连过来的这个作为remote peer
 				if n.self.RemotePeer == "" {
 					n.self.RemotePeer = peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
 				}
