@@ -52,6 +52,10 @@ type peerInfo struct {
 	Position ip.Position
 }
 
+type message struct {
+	Operand int
+}
+
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
 	// The first node entered the p2p net
 	if snid == "" {
@@ -62,7 +66,7 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	}
 
 	// build a stream which tags "NewNodeEntryProtocol"
-	conn, _ := gostream.Dial(ctx, n.self.Host, snid, protocol.NewNodeEntryProtocol)
+	conn, _ := gostream.Dial(ctx, n.self.Host, snid, protocol.NewNodeProtocol)
 
 	// send self peer Info to supernode
 	peerInfo := peerInfo{PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, n.self.Id.Pretty()),
@@ -70,17 +74,24 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	peerInfoJson, _ := json.Marshal(peerInfo)
 	conn.Write(peerInfoJson)
 
+	msg := message{}
+	buffer := make([]byte, 1024)
+	len, err := conn.Read(buffer)
+	err = json.Unmarshal(buffer[:len], &msg)
+	if err != nil {
+		log.Printf("fail to convert json to struct format: %s", err)
+	}
+	log.Println(msg.Operand)
+
 	// recv cluster information from supernode
 	reader := bufio.NewReader(conn)
-	msg, _ := reader.ReadString('\n')
-	fmt.Print(msg)
+	kk, _ := reader.ReadString('\n')
+	fmt.Print(kk)
 }
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
-
-	go n.StartAssignSelfAsSupernodeService()
 
 	fmt.Println("Proxy server is ready")
 	fmt.Println("libp2p-peer addresses:")
@@ -106,34 +117,30 @@ func (n *node) listenOnProxy(ctx context.Context) {
 	}
 	listener := &listener{l}
 
-	if n.self.RemotePeer != "" {
-		go func() {
-			for {
-				conn, err := listener.Accept()
-				if err != nil {
-					log.Fatalln(err)
-				}
-				go func() {
-					err := n.connHandler(ctx, conn)
-					if err != nil {
-						log.Println(err)
-					}
-				}()
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Fatalln(err)
 			}
-		}()
-	} else {
-		// no remote peer to relay the proxy requests
-		err := http.Serve(l, goproxy.NewProxyHttpServer())
-		if err != nil {
-			log.Println(err)
+			go func() {
+				err := n.connHandler(ctx, conn)
+				if err != nil {
+					log.Println(err)
+				}
+			}()
 		}
-	}
+	}()
+
 	<-ctx.Done()
 }
 
 func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
+	if n.self.RemotePeer == "" {
+		return nil
+	}
 	// 将stream转发给remote peer
-	stream, err := n.self.Host.NewStream(ctx, n.self.RemotePeer, protocol.CommonProtocol)
+	stream, err := n.self.Host.NewStream(ctx, n.self.RemotePeer, protocol.HTTPProxyProtocol)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -145,7 +152,7 @@ func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
 }
 
 func (n *node) StartProxyService() {
-	l, err := gostream.Listen(n.self.Host, protocol.CommonProtocol)
+	l, err := gostream.Listen(n.self.Host, protocol.HTTPProxyProtocol)
 	if err != nil {
 		log.Println(err)
 	}
@@ -158,18 +165,8 @@ func (n *node) StartProxyService() {
 	}
 }
 
-func (n *node) StartAssignSelfAsSupernodeService() {
-	l, err := gostream.Listen(n.self.Host, protocol.AssignSelfAsSupernode)
-	if err != nil {
-		log.Println(err)
-	}
-
-	defer l.Close()
-	fmt.Println("start assign self as supernode service")
-}
-
 func (n *node) StartNewNodeEntryService(ctx context.Context) {
-	l, err := gostream.Listen(n.self.Host, protocol.NewNodeEntryProtocol)
+	l, err := gostream.Listen(n.self.Host, protocol.NewNodeProtocol)
 	if err != nil {
 		log.Println(err)
 	}
@@ -210,9 +207,10 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
 				if p == nil {
-					RemotePeer := peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
-					// not found - assign self as a supernode
-					gostream.Dial(ctx, n.self.Host, RemotePeer, protocol.AssignSelfAsSupernode)
+					peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
+					message := message{Operand: 1}
+					msgJson, _ := json.Marshal(message)
+					conn.Write(msgJson)
 				} else {
 					// found
 					fmt.Println("found node")
