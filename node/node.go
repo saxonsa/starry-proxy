@@ -52,7 +52,9 @@ type peerInfo struct {
 }
 
 type message struct {
-	Operand int
+	Operand int `json:"operand"`
+	PeerList cluster.Cluster `json:"peer_list"`
+	SnList cluster.Cluster `json:"sn_list"`
 }
 
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
@@ -79,8 +81,11 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 		len, err := conn.Read(buffer)
 		err = json.Unmarshal(buffer[:len], &msg)
 		if err != nil {
+			log.Println("test here")
 			log.Printf("fail to convert json to struct format: %s", err)
 		}
+
+		fmt.Printf("ope: %d\n", msg.Operand)
 
 		switch msg.Operand {
 			case protocol.EXIT: {
@@ -90,6 +95,8 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				go n.StartNewNodeEntryService(ctx)
 				n.self.Mode = peer.SuperNode
 				n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
+				//n.snList = msg.SnList
+				//fmt.Printf("cluster id: %s\n", n.snList.GetClusterID())
 			}
 		}
 	}
@@ -213,12 +220,18 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
 				if p == nil {
-					peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
+					remotePeer := peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
+					n.snList.AddPeer(peer.Peer{
+						Id: remotePeer,
+						Position: peerInfo.Position,
+						Mode: peer.NormalNode,
+					})
 					message := message{Operand: protocol.AssignSelfAsSupernode}
 					msgJson, _ := json.Marshal(message)
 					conn.Write(msgJson)
 				} else {
 					// found
+
 					fmt.Println("found node")
 				}
 			}
