@@ -52,28 +52,16 @@ type peerInfo struct {
 	PeerAddr string
 	Position ip.Position
 	BandWidth int
-}
-
-type message struct {
-	Operand int `json:"operand"`
-	peerInfo peerInfo
-	SuperClusterSnid string
-	PeerClusterSnid string
-	SnList cluster.AbsCluster
-}
-
-type TestStruct struct {
-	PeerList map[string]interface{}
+	P2PPort int
 }
 
 type Message struct {
 	Operand int
 	SnList cluster.Cluster
+	ExistedSupernode peer.Peer // 如果访问的peer所在的区域已经有supernode, 将supernode的信息发给peer
 }
 
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
-	gob.Register(Message{})
-
 	// The first node entered the p2p net
 	if snid == "" {
 		// init 2 clusters
@@ -83,13 +71,25 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	}
 
 	// build a stream which tags "NewNodeEntryProtocol"
-	conn, _ := gostream.Dial(ctx, n.self.Host, snid, protocol.NewNodeProtocol)
+	conn, err := gostream.Dial(ctx, n.self.Host, snid, protocol.NewNodeProtocol)
+	if err != nil {
+		fmt.Println("dail new protocol failed")
+		fmt.Println(err)
+	}
 
 	// send self peer Info to supernode
-	peerInfo := peerInfo{PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, n.self.Id.Pretty()),
-		Position: n.self.Position}
-	peerInfoJson, _ := json.Marshal(peerInfo)
-	conn.Write(peerInfoJson)
+	peerInfo := peerInfo{PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, n.self.Id),
+		Position: n.self.Position, P2PPort: cfg.P2P.Port}
+	peerInfoJson, err := json.Marshal(peerInfo)
+	if err != nil {
+		fmt.Println("failed to marshal peerInfo")
+	}
+	_, err = conn.Write(peerInfoJson)
+	if err != nil {
+		fmt.Println("write error")
+		fmt.Println(err)
+		return
+	}
 
 	for {
 		// create a temp buffer
@@ -124,6 +124,16 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				n.snList.Snid = msg.SnList.Snid
 				n.snList.Position = msg.SnList.Position
 				n.snList.Nodes = msg.SnList.Nodes
+			}
+			case protocol.ExistedSupernodeInSelfCluster: {
+				// 获取supernode的peer信息
+				fmt.Printf("msg uid: %s\n", msg.ExistedSupernode.Id)
+				dest := peer.AddAddrToPeerstore(
+					n.self.Host,
+					fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", msg.ExistedSupernode.P2PPort, msg.ExistedSupernode.Id),
+				)
+				n.ConnectToNet(ctx, cfg, dest)
+				return
 			}
 		}
 	}
@@ -224,17 +234,18 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 			len, err := conn.Read(buffer)
 			err = json.Unmarshal(buffer[:len], &pInfo)
 			if err != nil {
-				log.Println("tesT???")
 				log.Printf("fail to convert json to struct format: %s", err)
 			}
 
 			// put the normal node in the right cluster
 			if pInfo.Position == n.peerList.GetClusterPosition() {
+				fmt.Println("put the node in my cluster")
 				// at the same position - put in the same cluster - conn directly to sn
 				err := n.peerList.AddPeer(peer.Peer{
 					Id: libp2ppeer.ID(pInfo.PeerAddr),
 					Position: pInfo.Position,
 					Mode: peer.NormalNode,
+					P2PPort: pInfo.P2PPort,
 				})
 				if err != nil {
 					fmt.Printf("fail to add a peer to peerList: %s", err)
@@ -255,11 +266,12 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 						Id: remotePeer,
 						Position: pInfo.Position,
 						Mode: peer.NormalNode,
+						P2PPort: pInfo.P2PPort,
 					})
 
 					// 让peer将自己作为supernode
 
-					// 构建snlist信息
+					// 将snlist的信息传给这个peer
 					peerInfoList := make([]peer.Peer, n.snList.GetClusterSize())
 					for index, star := range n.snList.Nodes {
 						peerInfoList[index] = peer.Peer{
@@ -268,6 +280,7 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 							Position: star.Position,
 							RemotePeer: star.RemotePeer,
 							BandWidth: star.BandWidth,
+							P2PPort: star.P2PPort,
 						}
 					}
 
@@ -280,25 +293,23 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 							Position: n.snList.Position,
 						},
 					}
-					bin_buf := new(bytes.Buffer)
-
-					// create a encoder object
-					gobobj := gob.NewEncoder(bin_buf)
-					gobobj.Encode(msg)
-					conn.Write(bin_buf.Bytes())
+					conn.Write(EncodeMessageToGobObject(msg).Bytes())
 				} else {
-					// found
-
-					fmt.Println("found node")
+					// found a supernode in current peer's position(cluster)
+					msg := Message{Operand: protocol.ExistedSupernodeInSelfCluster, ExistedSupernode: *p}
+					conn.Write(EncodeMessageToGobObject(msg).Bytes())
+					return
 				}
 			}
 			msg := Message{Operand: protocol.EXIT}
-			bin_buf := new(bytes.Buffer)
-
-			// create a encoder object
-			gobobj := gob.NewEncoder(bin_buf)
-			gobobj.Encode(msg)
-			conn.Write(bin_buf.Bytes())
+			conn.Write(EncodeMessageToGobObject(msg).Bytes())
 		}()
 	}
+}
+
+func EncodeMessageToGobObject(msg Message) *bytes.Buffer {
+	binBuf := new(bytes.Buffer)
+	gobobj := gob.NewEncoder(binBuf)
+	gobobj.Encode(msg)
+	return binBuf
 }

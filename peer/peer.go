@@ -26,6 +26,8 @@ type Peer struct {
 
 	Id peer.ID
 
+	P2PPort int
+
 	Host host.Host
 
 	ProxyAddr ma.Multiaddr
@@ -54,6 +56,7 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		Mode:     mode,
 		Host:     h,
 		Id: 	  h.ID(),
+		P2PPort:  cfg.P2P.Port,
 		Position: cfg.Position,
 		RemotePeer: "",
 		ProxyAddr: proxyAddr,

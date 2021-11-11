@@ -30,7 +30,6 @@ func main() {
 		if err != nil {
 			log.Fatalln(err)
 		}
-
 		n.ConnectToNet(ctx, cfg, p.RemotePeer)
 
 		n.Serve(ctx, cfg)
