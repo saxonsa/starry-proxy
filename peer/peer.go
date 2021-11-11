@@ -70,7 +70,7 @@ func makeHost(ctx context.Context, cfg *config.Config) (h host.Host, err error) 
 	//if opt, err = listenP2PAddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.IP, cfg.P2P.Port)); err != nil {
 	//	return nil, err
 	//}
-	extMultiAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.IP, cfg.P2P.Port))
+	extMultiAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.P2P.Port))
 	if err != nil {
 		log.Printf("Error creating multiaddress: %v\n", err)
 		return nil, err
@@ -93,11 +93,6 @@ func makeHost(ctx context.Context, cfg *config.Config) (h host.Host, err error) 
 	return h, nil
 }
 
-func listenP2PAddr(addr string) (libp2p.Option, error) {
-	return libp2p.ListenAddrStrings(addr), nil
-}
-
-
 // AddAddrToPeerstore parses a peer multiaddress and adds
 // it to the given host's peerstore, so it knows how to
 // contact it. It returns the peer ID of the remote peer.
@@ -106,7 +101,7 @@ func AddAddrToPeerstore(h host.Host, addr string) peer.ID {
 	// given multiaddress
 	ipfsaddr, err := ma.NewMultiaddr(addr)
 	if err != nil {
-		log.Printf("fail to parse mmmmm!\n")
+		log.Printf("fail to parse multiaddr!\n")
 		log.Fatalln(err)
 	}
 	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
