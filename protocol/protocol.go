@@ -8,8 +8,10 @@ const (
 
 const (
 	EXIT = 100
+
 	AssignSelfAsSupernode = 101
+
+	SuperClusterNode = 102
+
+	PeerClusterNode = 103
 )
-
-
-

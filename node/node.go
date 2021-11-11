@@ -22,7 +22,7 @@ import (
 )
 
 type Node interface {
-	Serve(ctx context.Context)
+	Serve(ctx context.Context, cfg *config.Config)
 
 	ConnectToNet(ctx context.Context, cfg *config.Config, superNode libp2ppeer.ID)
 }
@@ -49,20 +49,23 @@ func New(peer peer.Peer) (Node, error) {
 type peerInfo struct {
 	PeerAddr string
 	Position ip.Position
+	BandWidth int
 }
 
 type message struct {
 	Operand int `json:"operand"`
-	PeerList cluster.Cluster `json:"peer_list"`
-	SnList cluster.Cluster `json:"sn_list"`
+	peerInfo peerInfo
+	SuperClusterSnid string
+	PeerClusterSnid string
+	SnList cluster.ClusterInterface
 }
 
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
 	// The first node entered the p2p net
 	if snid == "" {
 		// init 2 clusters
-		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList)
-		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
+		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList, "")
+		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList, "")
 		return
 	}
 
@@ -92,17 +95,19 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				return
 			}
 			case protocol.AssignSelfAsSupernode: {
-				go n.StartNewNodeEntryService(ctx)
+				go n.StartNewNodeEntryService(cfg)
 				n.self.Mode = peer.SuperNode
-				n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
-				//n.snList = msg.SnList
-				//fmt.Printf("cluster id: %s\n", n.snList.GetClusterID())
+				n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList, "")
+				//n.snList, _ = cluster.New(n.self, cfg, cluster.SNList, libp2ppeer.ID(msg.SuperClusterSnid))
 			}
+			//case protocol.SuperClusterNode: {
+			//	fmt.Println("tet..sa")
+			//}
 		}
 	}
 }
 
-func (n *node) Serve(ctx context.Context) {
+func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
 
@@ -114,7 +119,7 @@ func (n *node) Serve(ctx context.Context) {
 
 	if n.self.Mode == peer.SuperNode {
 		// start a service waiting for the node to enter the cluster
-		go n.StartNewNodeEntryService(ctx)
+		go n.StartNewNodeEntryService(cfg)
 	}
 	// 监听设置好的proxy端口, 将http请求转发到这个端口上, 然后端口将stream转发给remote proxy
 	// 如果没有remote peer, 自己处理端口的请求
@@ -178,7 +183,7 @@ func (n *node) StartProxyService() {
 	}
 }
 
-func (n *node) StartNewNodeEntryService(ctx context.Context) {
+func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 	l, err := gostream.Listen(n.self.Host, protocol.NewNodeProtocol)
 	if err != nil {
 		log.Println(err)
@@ -192,20 +197,21 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 
 		go func() {
 			// receive peer information
-			peerInfo := peerInfo{}
+			pInfo := peerInfo{}
 			buffer := make([]byte, 1024)
 			len, err := conn.Read(buffer)
-			err = json.Unmarshal(buffer[:len], &peerInfo)
+			err = json.Unmarshal(buffer[:len], &pInfo)
 			if err != nil {
+				log.Println("tesT???")
 				log.Printf("fail to convert json to struct format: %s", err)
 			}
 
 			// put the normal node in the right cluster
-			if peerInfo.Position == n.peerList.GetClusterPosition() {
+			if pInfo.Position == n.peerList.GetClusterPosition() {
 				// at the same position - put in the same cluster - conn directly to sn
 				err := n.peerList.AddPeer(peer.Peer{
-					Id: libp2ppeer.ID(peerInfo.PeerAddr),
-					Position: peerInfo.Position,
+					Id: libp2ppeer.ID(pInfo.PeerAddr),
+					Position: pInfo.Position,
 					Mode: peer.NormalNode,
 				})
 				if err != nil {
@@ -214,21 +220,43 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 
 				// 如果supernode没有remotepeer, 立即将连过来的这个作为remote peer
 				if n.self.RemotePeer == "" {
-					n.self.RemotePeer = peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
+					n.self.RemotePeer = peer.AddAddrToPeerstore(n.self.Host, pInfo.PeerAddr)
 				}
 			} else {
 				// find if the supernode of the right cluster exists
-				p := n.snList.FindSuperNodeInPosition(peerInfo.Position)
+				p := n.snList.FindSuperNodeInPosition(pInfo.Position)
 				if p == nil {
-					remotePeer := peer.AddAddrToPeerstore(n.self.Host, peerInfo.PeerAddr)
+					remotePeer := peer.AddAddrToPeerstore(n.self.Host, pInfo.PeerAddr)
+
+					// 将peer加入到supernode list
 					n.snList.AddPeer(peer.Peer{
 						Id: remotePeer,
-						Position: peerInfo.Position,
+						Position: pInfo.Position,
 						Mode: peer.NormalNode,
 					})
-					message := message{Operand: protocol.AssignSelfAsSupernode}
-					msgJson, _ := json.Marshal(message)
+
+					// 让peer将自己作为supernode
+					msg := message{Operand: protocol.AssignSelfAsSupernode}
+					msgJson, err := json.Marshal(msg)
+					if err != nil {
+						fmt.Println(err)
+					}
 					conn.Write(msgJson)
+
+					//msg := message{Operand: protocol.AssignSelfAsSupernode, SuperClusterSnid: string(n.snList.Snid)}
+					//msgJson, _ := json.Marshal(&msg)
+					//conn.Write(msgJson)
+
+					//// 给peer发送cluster的信息
+					//for pid, p := range n.snList.Nodes {
+					//	msg = message{Operand: protocol.SuperClusterNode, peerInfo: peerInfo{
+					//		PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, pid.Pretty()),
+					//		Position: p.Position,
+					//		BandWidth: p.BandWidth,
+					//	}}
+					//	msgJson, _ = json.Marshal(msg)
+					//	conn.Write(msgJson)
+					//}
 				} else {
 					// found
 
@@ -236,7 +264,7 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				}
 			}
 			message := message{Operand: protocol.EXIT}
-			msgJson, _ := json.Marshal(message)
+			msgJson, _ := json.Marshal(&message)
 			conn.Write(msgJson)
 		}()
 	}

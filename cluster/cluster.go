@@ -14,7 +14,7 @@ const (
 	SNList = 1
 )
 
-type Cluster interface {
+type ClusterInterface interface {
 	GetClusterID() string
 	GetClusterSize() int
 	GetClusterPosition() ip.Position
@@ -22,16 +22,19 @@ type Cluster interface {
 	FindSuperNodeInPosition(position ip.Position) *peer.Peer
 }
 
-type cluster struct {
+type Cluster struct {
 	Id string `json:"Id"`
 	Snid libp2ppeer.ID `json:"Snid"`
 	Nodes map[libp2ppeer.ID]peer.Peer `json:"Nodes"`
 	Position ip.Position `json:"Position"`
 }
 
-func New(p peer.Peer, cfg *config.Config, mode int) (Cluster, error) {
+func New(p peer.Peer, cfg *config.Config, mode int, snid libp2ppeer.ID) (Cluster, error) {
+	if snid == "" {
+		snid = p.Id
+	}
 	position := ip.Position{Province: cfg.Position.Province, City: cfg.Position.City}
-	cluster := cluster{Snid: p.Id, Nodes: make(map[libp2ppeer.ID]peer.Peer), Position: position}
+	cluster := Cluster{Snid: snid, Nodes: make(map[libp2ppeer.ID]peer.Peer), Position: position}
 	cluster.Nodes[p.Id] = p
 
 	// generate cluster id
@@ -39,23 +42,23 @@ func New(p peer.Peer, cfg *config.Config, mode int) (Cluster, error) {
 	if mode == SNList {
 		log.Println(cluster.Id)
 	}
-	return &cluster, nil
+	return cluster, nil
 }
 
-func (c *cluster) GetClusterSize() int {
+func (c *Cluster) GetClusterSize() int {
 	return len(c.Nodes)
 }
 
-func (c *cluster) GetClusterPosition() ip.Position {
+func (c *Cluster) GetClusterPosition() ip.Position {
 	return c.Position
 }
 
-func (c *cluster) AddPeer(p peer.Peer) error {
+func (c *Cluster) AddPeer(p peer.Peer) error {
 	c.Nodes[p.Id] = p
 	return nil
 }
 
-func (c *cluster) FindSuperNodeInPosition(position ip.Position) *peer.Peer {
+func (c *Cluster) FindSuperNodeInPosition(position ip.Position) *peer.Peer {
 	for _, p := range c.Nodes {
 		if p.Position == position {
 			return &p
@@ -64,7 +67,7 @@ func (c *cluster) FindSuperNodeInPosition(position ip.Position) *peer.Peer {
 	return nil
 }
 
-func (c *cluster) GetClusterID() string {
+func (c *Cluster) GetClusterID() string {
 	return c.Id
 }
 
