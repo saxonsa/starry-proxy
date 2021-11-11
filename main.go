@@ -33,7 +33,7 @@ func main() {
 
 		n.ConnectToNet(ctx, cfg, p.RemotePeer)
 
-		n.Serve(ctx)
+		n.Serve(ctx, cfg)
 	} else {
 		p, err := peer.New(ctx, cfg, peer.SuperNode)
 		if err != nil {
@@ -48,6 +48,6 @@ func main() {
 		n.ConnectToNet(ctx, cfg, "")
 
 		// start service
-		n.Serve(ctx)
+		n.Serve(ctx, cfg)
 	}
 }
