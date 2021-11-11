@@ -2,7 +2,9 @@ package node
 
 import (
 	"StarryProxy/ip"
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -57,15 +59,26 @@ type message struct {
 	peerInfo peerInfo
 	SuperClusterSnid string
 	PeerClusterSnid string
-	SnList cluster.ClusterInterface
+	SnList cluster.AbsCluster
+}
+
+type TestStruct struct {
+	PeerList map[string]interface{}
+}
+
+type Message struct {
+	Operand int
+	SnList cluster.Cluster
 }
 
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
+	gob.Register(Message{})
+
 	// The first node entered the p2p net
 	if snid == "" {
 		// init 2 clusters
-		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList, "")
-		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList, "")
+		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList)
+		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
 		return
 	}
 
@@ -79,16 +92,24 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	conn.Write(peerInfoJson)
 
 	for {
-		msg := message{}
-		buffer := make([]byte, 1024)
-		len, err := conn.Read(buffer)
-		err = json.Unmarshal(buffer[:len], &msg)
+		// create a temp buffer
+		tmp := make([]byte, 1024)
+		_, err := conn.Read(tmp)
 		if err != nil {
-			log.Println("test here")
-			log.Printf("fail to convert json to struct format: %s", err)
+			fmt.Println(err)
 		}
 
-		fmt.Printf("ope: %d\n", msg.Operand)
+		// convert bytes into buffer
+		buffer := bytes.NewBuffer(tmp)
+		msg := new(Message)
+
+		// creates a decoder obj
+		gobobjdec := gob.NewDecoder(buffer)
+		err = gobobjdec.Decode(msg)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(msg)
 
 		switch msg.Operand {
 			case protocol.EXIT: {
@@ -96,13 +117,14 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 			}
 			case protocol.AssignSelfAsSupernode: {
 				go n.StartNewNodeEntryService(cfg)
-				n.self.Mode = peer.SuperNode
-				n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList, "")
-				//n.snList, _ = cluster.New(n.self, cfg, cluster.SNList, libp2ppeer.ID(msg.SuperClusterSnid))
+				n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
+
+				// copy msg.Snlist into n.snlist
+				n.snList.Id = msg.SnList.Id
+				n.snList.Snid = msg.SnList.Snid
+				n.snList.Position = msg.SnList.Position
+				n.snList.Nodes = msg.SnList.Nodes
 			}
-			//case protocol.SuperClusterNode: {
-			//	fmt.Println("tet..sa")
-			//}
 		}
 	}
 }
@@ -236,36 +258,47 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 					})
 
 					// 让peer将自己作为supernode
-					msg := message{Operand: protocol.AssignSelfAsSupernode}
-					msgJson, err := json.Marshal(msg)
-					if err != nil {
-						fmt.Println(err)
+
+					// 构建snlist信息
+					peerInfoList := make([]peer.Peer, n.snList.GetClusterSize())
+					for index, star := range n.snList.Nodes {
+						peerInfoList[index] = peer.Peer{
+							Id: star.Id,
+							Mode: star.Mode,
+							Position: star.Position,
+							RemotePeer: star.RemotePeer,
+							BandWidth: star.BandWidth,
+						}
 					}
-					conn.Write(msgJson)
 
-					//msg := message{Operand: protocol.AssignSelfAsSupernode, SuperClusterSnid: string(n.snList.Snid)}
-					//msgJson, _ := json.Marshal(&msg)
-					//conn.Write(msgJson)
+					msg := Message{
+						Operand: protocol.AssignSelfAsSupernode,
+						SnList: cluster.Cluster{
+							Id: n.snList.Id,
+							Snid: n.snList.Snid,
+							Nodes: peerInfoList, // nodes只有部分属性可以传过去
+							Position: n.snList.Position,
+						},
+					}
+					bin_buf := new(bytes.Buffer)
 
-					//// 给peer发送cluster的信息
-					//for pid, p := range n.snList.Nodes {
-					//	msg = message{Operand: protocol.SuperClusterNode, peerInfo: peerInfo{
-					//		PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, pid.Pretty()),
-					//		Position: p.Position,
-					//		BandWidth: p.BandWidth,
-					//	}}
-					//	msgJson, _ = json.Marshal(msg)
-					//	conn.Write(msgJson)
-					//}
+					// create a encoder object
+					gobobj := gob.NewEncoder(bin_buf)
+					gobobj.Encode(msg)
+					conn.Write(bin_buf.Bytes())
 				} else {
 					// found
 
 					fmt.Println("found node")
 				}
 			}
-			message := message{Operand: protocol.EXIT}
-			msgJson, _ := json.Marshal(&message)
-			conn.Write(msgJson)
+			msg := Message{Operand: protocol.EXIT}
+			bin_buf := new(bytes.Buffer)
+
+			// create a encoder object
+			gobobj := gob.NewEncoder(bin_buf)
+			gobobj.Encode(msg)
+			conn.Write(bin_buf.Bytes())
 		}()
 	}
 }

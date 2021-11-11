@@ -14,7 +14,7 @@ const (
 	SNList = 1
 )
 
-type ClusterInterface interface {
+type AbsCluster interface {
 	GetClusterID() string
 	GetClusterSize() int
 	GetClusterPosition() ip.Position
@@ -23,19 +23,17 @@ type ClusterInterface interface {
 }
 
 type Cluster struct {
-	Id string `json:"Id"`
-	Snid libp2ppeer.ID `json:"Snid"`
-	Nodes map[libp2ppeer.ID]peer.Peer `json:"Nodes"`
-	Position ip.Position `json:"Position"`
+	Id       string                      `json:"id"`
+	Snid     libp2ppeer.ID               `json:"snid"`
+	Nodes    []peer.Peer 				 `json:"nodes"`
+	Position ip.Position                 `json:"position"`
 }
 
-func New(p peer.Peer, cfg *config.Config, mode int, snid libp2ppeer.ID) (Cluster, error) {
-	if snid == "" {
-		snid = p.Id
-	}
+func New(p peer.Peer, cfg *config.Config, mode int) (Cluster, error) {
 	position := ip.Position{Province: cfg.Position.Province, City: cfg.Position.City}
-	cluster := Cluster{Snid: snid, Nodes: make(map[libp2ppeer.ID]peer.Peer), Position: position}
-	cluster.Nodes[p.Id] = p
+	cluster := Cluster{Snid: p.Id, Nodes: make([]peer.Peer, 0), Position: position}
+	cluster.Nodes = append(cluster.Nodes, p)
+	//cluster.Nodes[p.Id] = p
 
 	// generate cluster id
 	cluster.Id = clusterName(shortID(p.Id), mode)
@@ -54,7 +52,8 @@ func (c *Cluster) GetClusterPosition() ip.Position {
 }
 
 func (c *Cluster) AddPeer(p peer.Peer) error {
-	c.Nodes[p.Id] = p
+	c.Nodes = append(c.Nodes, p)
+	//c.Nodes[p.Id] = p
 	return nil
 }
 
