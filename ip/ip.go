@@ -60,14 +60,14 @@ func GetPositionFromIP(ip string) (Position, error) {
 	return res.Data, nil
 }
 
-func GetLocalPosition() (Position, error) {
-	PublicPosition, err := GetPublicIP()
+func GetLocalPosition() (string, Position, error) {
+	PublicIP, err := GetPublicIP()
 	if err != nil {
 		log.Fatalln("Fail to get public ip")
 	}
-	Position, err := GetPositionFromIP(PublicPosition)
+	Position, err := GetPositionFromIP(PublicIP)
 	if err != nil {
 		log.Fatalln("Fail to get position from ip")
 	}
-	return Position, nil
+	return PublicIP, Position, nil
 }
