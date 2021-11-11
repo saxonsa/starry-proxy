@@ -303,6 +303,7 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 					// found a supernode in current peer's position(cluster)
 					msg := Message{Operand: protocol.ExistedSupernodeInSelfCluster, ExistedSupernode: *p}
 					conn.Write(EncodeMessageToGobObject(msg).Bytes())
+
 					return
 				}
 			}

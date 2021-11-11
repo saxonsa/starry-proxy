@@ -19,6 +19,8 @@ type Config struct {
 	P2P P2P `json:"P2P"`
 
 	Position ip.Position `json:"Position"`
+
+	IP string `json:"IP"`
 }
 
 type Node struct {
@@ -43,11 +45,10 @@ func InitConfig() (*Config, error) {
 	err = json.Unmarshal(bytes, &cfg)
 
 	// get peer position
-	position, err := ip.GetLocalPosition()
+	cfg.IP, cfg.Position, err = ip.GetLocalPosition()
 	if err != nil {
 		log.Printf("Fail to get local position from cz88 api: %s", err)
 	}
-	cfg.Position = position
 
 	flag.StringVar(&cfg.SuperNode.Id, "snid", "", "supernode id used to enter the p2p net")
 	flag.IntVar(&cfg.Proxy.Port, "proxy", cfg.Proxy.Port, "proxy port")

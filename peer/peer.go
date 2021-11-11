@@ -120,5 +120,6 @@ func AddAddrToPeerstore(h host.Host, addr string) peer.ID {
 	for index, value := range h.Peerstore().Peers() {
 		fmt.Printf("peer %d, %s\n", index, value)
 	}
+	log.Printf("num of peers in peerstore: %d\n", h.Peerstore().Peers().Len())
 	return peerid
 }
