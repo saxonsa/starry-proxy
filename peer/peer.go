@@ -34,7 +34,7 @@ type Peer struct {
 
 	Position ip.Position
 
-	ComputingPower int
+	BandWidth int
 }
 
 func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
