@@ -67,11 +67,25 @@ func makeHost(ctx context.Context, cfg *config.Config) (h host.Host, err error) 
 	var opt libp2p.Option
 	var opts []libp2p.Option
 
-	if opt, err = listenP2PAddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.P2P.Port)); err != nil {
+	//if opt, err = listenP2PAddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.IP, cfg.P2P.Port)); err != nil {
+	//	return nil, err
+	//}
+	extMultiAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.IP, cfg.P2P.Port))
+	if err != nil {
+		log.Printf("Error creating multiaddress: %v\n", err)
 		return nil, err
 	}
+	addressFactory := func(addrs []ma.Multiaddr) []ma.Multiaddr {
+		if extMultiAddr != nil {
+			addrs = append(addrs, extMultiAddr)
+		}
+		return addrs
+	}
+
+	opt = libp2p.AddrsFactory(addressFactory)
 
 	opts = append(opts, opt)
+
 	h, err = libp2p.New(ctx, opts...)
 	if err != nil {
 		return nil, err

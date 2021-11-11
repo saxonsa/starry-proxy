@@ -78,7 +78,7 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	}
 
 	// send self peer Info to supernode
-	peerInfo := peerInfo{PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, n.self.Id),
+	peerInfo := peerInfo{PeerAddr: fmt.Sprintf("/ip4/%s/tcp/%d/ipfs/%s", cfg.IP, cfg.P2P.Port, n.self.Id),
 		Position: n.self.Position, P2PPort: cfg.P2P.Port}
 	peerInfoJson, err := json.Marshal(peerInfo)
 	if err != nil {
