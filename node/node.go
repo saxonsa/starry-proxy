@@ -132,7 +132,12 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 					n.self.Host,
 					fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", msg.ExistedSupernode.P2PPort, msg.ExistedSupernode.Id),
 				)
+
+				// 以自己cluster拥有的supernode接入p2p net
 				n.ConnectToNet(ctx, cfg, dest)
+
+				// 改变remote peer成现在的supernode
+				n.self.RemotePeer = dest
 				return
 			}
 		}
