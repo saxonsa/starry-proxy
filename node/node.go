@@ -312,6 +312,7 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 					},
 				}
 				conn.Write(EncodeMessageToGobObject(msg).Bytes())
+
 			} else {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(pInfo.Position)
