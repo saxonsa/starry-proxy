@@ -138,10 +138,12 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 
 				// copy msg.Snlist into n.snlist
 				n.snList = CopyCluster(n.snList, msg.SnList)
+
+				// 将snlist中和自己没有连接起来的连起来
+				n.ConnectUnconnectedClusterPeer(n.snList)
 			}
 			case protocol.ExistedSupernodeInSelfCluster: {
 				// 获取supernode的peer信息
-				fmt.Printf("msg uid: %s\n", msg.ExistedSupernode.Id)
 				dest := peer.AddAddrToPeerstore(
 					n.self.Host,
 					fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", msg.ExistedSupernode.P2PPort, msg.ExistedSupernode.Id),
@@ -298,6 +300,7 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 				}
 				conn.Write(EncodeMessageToGobObject(msg).Bytes())
 
+				// 将snlist发给这个peer
 				SNInfoList := ConstructSendableNodesList(n.snList)
 				msg = Message{
 					Operand: protocol.SNList,
