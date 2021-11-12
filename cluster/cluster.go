@@ -4,14 +4,12 @@ import (
 	"StarryProxy/config"
 	"StarryProxy/ip"
 	"StarryProxy/peer"
-	"log"
-
 	libp2ppeer "github.com/libp2p/go-libp2p-core/peer"
 )
 
 const (
-	PeerList = 0
-	SNList = 1
+	PeerList = iota
+	SNList
 )
 
 type AbsCluster interface {
@@ -37,9 +35,7 @@ func New(p peer.Peer, cfg *config.Config, mode int) (Cluster, error) {
 
 	// generate cluster id
 	cluster.Id = clusterName(shortID(p.Id), mode)
-	if mode == SNList {
-		log.Println(cluster.Id)
-	}
+
 	return cluster, nil
 }
 
@@ -53,7 +49,6 @@ func (c *Cluster) GetClusterPosition() ip.Position {
 
 func (c *Cluster) AddPeer(p peer.Peer) error {
 	c.Nodes = append(c.Nodes, p)
-	//c.Nodes[p.Id] = p
 	return nil
 }
 

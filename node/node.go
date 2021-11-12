@@ -355,6 +355,10 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 	}
 }
 
+func (n *node) StartAliveTest(clusterType int) {
+
+}
+
 func (n *node) ConnectUnconnectedClusterPeer(c cluster.Cluster) {
 	nodeSlice := n.self.Host.Peerstore().Peers()
 	for _, v := range c.Nodes {
