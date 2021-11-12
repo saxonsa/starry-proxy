@@ -120,10 +120,17 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				return
 			}
 			case protocol.PeerList: {
+				// copy msg.PeerList into n.SnList
 				n.peerList = CopyCluster(n.peerList, msg.PeerList)
-				for i, v := range n.peerList.Nodes {
-					fmt.Printf("peers %d: %s\n", i, v.Id)
-				}
+
+				// 将peerList中和自己没有连接的连起来
+				n.ConnectUnconnectedClusterPeer(n.peerList)
+			}
+			case protocol.SNList: {
+				n.snList = CopyCluster(n.peerList, msg.SnList)
+
+				// 将snlist中和自己没有连接起来的连起来
+				n.ConnectUnconnectedClusterPeer(n.snList)
 			}
 			case protocol.AssignSelfAsSupernode: {
 				go n.StartNewNodeEntryService(cfg)
@@ -290,10 +297,23 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 					},
 				}
 				conn.Write(EncodeMessageToGobObject(msg).Bytes())
+
+				SNInfoList := ConstructSendableNodesList(n.snList)
+				msg = Message{
+					Operand: protocol.SNList,
+					PeerList: cluster.Cluster{
+						Id: n.peerList.Id,
+						Snid: n.peerList.Snid,
+						Nodes: SNInfoList,
+						Position: n.peerList.Position,
+					},
+				}
+				conn.Write(EncodeMessageToGobObject(msg).Bytes())
 			} else {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(pInfo.Position)
-				if p == nil {
+
+				if p == nil { // not exists 让peer将自己作为supernode
 					remotePeer := peer.AddAddrToPeerstore(n.self.Host, pInfo.PeerAddr)
 
 					// 将peer加入到supernode list
@@ -303,8 +323,6 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 						Mode: peer.NormalNode,
 						P2PPort: pInfo.P2PPort,
 					})
-
-					// 让peer将自己作为supernode
 
 					// 将snlist的信息传给这个peer
 					peerInfoList := ConstructSendableNodesList(n.snList)
@@ -330,6 +348,17 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 			msg := Message{Operand: protocol.EXIT}
 			conn.Write(EncodeMessageToGobObject(msg).Bytes())
 		}()
+	}
+}
+
+func (n *node) ConnectUnconnectedClusterPeer(c cluster.Cluster) {
+	nodeSlice := n.self.Host.Peerstore().Peers()
+	for _, v := range c.Nodes {
+		for _, value := range nodeSlice {
+			if v.Id == value {
+				break
+			}
+		}
 	}
 }
 
