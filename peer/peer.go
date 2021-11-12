@@ -17,8 +17,9 @@ import (
 type Mode int32
 
 const (
-	SuperNode = 0
-	NormalNode = 1
+	SSPNode = 0
+	SuperNode = 1
+	NormalNode = 2
 )
 
 type Peer struct {

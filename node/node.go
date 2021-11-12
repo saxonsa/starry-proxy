@@ -63,7 +63,7 @@ type Message struct {
 
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
 	// The first node entered the p2p net
-	if snid == "" {
+	if n.self.Mode == peer.SSPNode {
 		// init 2 clusters
 		n.snList, _ = cluster.New(n.self, cfg, cluster.SNList)
 		n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
@@ -133,11 +133,11 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 					fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", msg.ExistedSupernode.P2PPort, msg.ExistedSupernode.Id),
 				)
 
-				// 以自己cluster拥有的supernode接入p2p net
-				n.ConnectToNet(ctx, cfg, dest)
-
 				// 改变remote peer成现在的supernode
 				n.self.RemotePeer = dest
+
+				// 以自己cluster拥有的supernode接入p2p net
+				n.ConnectToNet(ctx, cfg, dest)
 				return
 			}
 		}
@@ -154,7 +154,7 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 		fmt.Printf("%s/ipfs/%s\n", a, libp2ppeer.Encode(n.self.Id))
 	}
 
-	if n.self.Mode == peer.SuperNode {
+	if n.self.Mode == peer.SuperNode || n.self.Mode == peer.SSPNode {
 		// start a service waiting for the node to enter the cluster
 		go n.StartNewNodeEntryService(cfg)
 	}
