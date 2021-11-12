@@ -4,16 +4,22 @@ const (
 	HTTPProxyProtocol = "/starry-proxy/http/0.0.1" // http or https stream
 
 	NewNodeProtocol = "/starry-proxy/new-node-entry/0.0.1"
+
+	NodeAliveTestProtocol = "/starry-protocol/node-alive-test-protocol/0.0.1"
 )
 
 const (
-	EXIT = 100
+	EXIT = iota
 
-	PeerList = 101
+	PeerList
 
-	SNList = 102
+	SNList
 
-	AssignSelfAsSupernode = 103
+	AllClusterList
 
-	ExistedSupernodeInSelfCluster = 104
+	AssignSelfAsSupernode
+
+	ExistedSupernodeInSelfCluster
+
+	AliveTest
 )
