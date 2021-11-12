@@ -9,7 +9,9 @@ const (
 const (
 	EXIT = 100
 
-	AssignSelfAsSupernode = 101
+	PeerList = 101
 
-	ExistedSupernodeInSelfCluster = 102
+	AssignSelfAsSupernode = 102
+
+	ExistedSupernodeInSelfCluster = 103
 )

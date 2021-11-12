@@ -10,6 +10,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 
 	"StarryProxy/cluster"
 	"StarryProxy/config"
@@ -49,6 +51,7 @@ func New(peer peer.Peer) (Node, error) {
 
 // msg sent from peer to super node when entry the p2p net
 type peerInfo struct {
+	Id libp2ppeer.ID
 	PeerAddr string
 	Position ip.Position
 	BandWidth int
@@ -58,6 +61,7 @@ type peerInfo struct {
 type Message struct {
 	Operand int
 	SnList cluster.Cluster
+	PeerList cluster.Cluster
 	ExistedSupernode peer.Peer // 如果访问的peer所在的区域已经有supernode, 将supernode的信息发给peer
 }
 
@@ -78,7 +82,7 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	}
 
 	// send self peer Info to supernode
-	peerInfo := peerInfo{PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, n.self.Id),
+	peerInfo := peerInfo{Id: n.self.Id, PeerAddr: fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", cfg.P2P.Port, n.self.Id),
 		Position: n.self.Position, P2PPort: cfg.P2P.Port}
 	peerInfoJson, err := json.Marshal(peerInfo)
 	if err != nil {
@@ -115,15 +119,18 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 			case protocol.EXIT: {
 				return
 			}
+			case protocol.PeerList: {
+				n.peerList = CopyCluster(n.peerList, msg.PeerList)
+				for i, v := range n.peerList.Nodes {
+					fmt.Printf("peers %d: %s\n", i, v.Id)
+				}
+			}
 			case protocol.AssignSelfAsSupernode: {
 				go n.StartNewNodeEntryService(cfg)
 				n.peerList, _ = cluster.New(n.self, cfg, cluster.PeerList)
 
 				// copy msg.Snlist into n.snlist
-				n.snList.Id = msg.SnList.Id
-				n.snList.Snid = msg.SnList.Snid
-				n.snList.Position = msg.SnList.Position
-				n.snList.Nodes = msg.SnList.Nodes
+				n.snList = CopyCluster(n.snList, msg.SnList)
 			}
 			case protocol.ExistedSupernodeInSelfCluster: {
 				// 获取supernode的peer信息
@@ -145,6 +152,16 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 }
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
+
+	// do something when node quit
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt)
+	go func() {
+		<-ch
+		fmt.Println("node quit!")
+		os.Exit(0)
+	}()
+
 	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
 
@@ -247,7 +264,7 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 				fmt.Println("put the node in my cluster")
 				// at the same position - put in the same cluster - conn directly to sn
 				err := n.peerList.AddPeer(peer.Peer{
-					Id: libp2ppeer.ID(pInfo.PeerAddr),
+					Id: pInfo.Id,
 					Position: pInfo.Position,
 					Mode: peer.NormalNode,
 					P2PPort: pInfo.P2PPort,
@@ -260,6 +277,19 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 				if n.self.RemotePeer == "" {
 					n.self.RemotePeer = peer.AddAddrToPeerstore(n.self.Host, pInfo.PeerAddr)
 				}
+
+				// 将peerList发给这个peer
+				peerInfoList := ConstructSendableNodesList(n.peerList)
+				msg := Message{
+					Operand: protocol.PeerList,
+					PeerList: cluster.Cluster{
+						Id: n.peerList.Id,
+						Snid: n.peerList.Snid,
+						Nodes: peerInfoList,
+						Position: n.peerList.Position,
+					},
+				}
+				conn.Write(EncodeMessageToGobObject(msg).Bytes())
 			} else {
 				// find if the supernode of the right cluster exists
 				p := n.snList.FindSuperNodeInPosition(pInfo.Position)
@@ -277,17 +307,7 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 					// 让peer将自己作为supernode
 
 					// 将snlist的信息传给这个peer
-					peerInfoList := make([]peer.Peer, n.snList.GetClusterSize())
-					for index, star := range n.snList.Nodes {
-						peerInfoList[index] = peer.Peer{
-							Id: star.Id,
-							Mode: star.Mode,
-							Position: star.Position,
-							RemotePeer: star.RemotePeer,
-							BandWidth: star.BandWidth,
-							P2PPort: star.P2PPort,
-						}
-					}
+					peerInfoList := ConstructSendableNodesList(n.snList)
 
 					msg := Message{
 						Operand: protocol.AssignSelfAsSupernode,
@@ -318,4 +338,27 @@ func EncodeMessageToGobObject(msg Message) *bytes.Buffer {
 	gobobj := gob.NewEncoder(binBuf)
 	gobobj.Encode(msg)
 	return binBuf
+}
+
+func ConstructSendableNodesList(c cluster.Cluster) []peer.Peer {
+	peerInfoList := make([]peer.Peer, c.GetClusterSize())
+	for index, star := range c.Nodes {
+		peerInfoList[index] = peer.Peer{
+			Id: star.Id,
+			Mode: star.Mode,
+			Position: star.Position,
+			RemotePeer: star.RemotePeer,
+			BandWidth: star.BandWidth,
+			P2PPort: star.P2PPort,
+		}
+	}
+	return peerInfoList
+}
+
+func CopyCluster(c1 cluster.Cluster, c2 cluster.Cluster) cluster.Cluster {
+	c1.Id = c2.Id
+	c1.Snid = c2.Snid
+	c1.Nodes = c2.Nodes
+	c1.Position = c2.Position
+	return c1
 }
