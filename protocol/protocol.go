@@ -15,6 +15,8 @@ const (
 
 	SNList
 
+	AllClusterList
+
 	AssignSelfAsSupernode
 
 	ExistedSupernodeInSelfCluster

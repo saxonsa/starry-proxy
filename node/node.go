@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"StarryProxy/cluster"
 	"StarryProxy/config"
@@ -102,7 +103,6 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 		if err != nil {
 			fmt.Println(err)
 		}
-
 		// convert bytes into buffer
 		buffer := bytes.NewBuffer(tmp)
 		msg := new(Message)
@@ -117,6 +117,7 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 
 		switch msg.Operand {
 			case protocol.EXIT: {
+				fmt.Println("test exit")
 				return
 			}
 			case protocol.PeerList: {
@@ -124,6 +125,12 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				n.peerList = CopyCluster(n.peerList, msg.PeerList)
 
 				// 将peerList中和自己没有连接的连起来
+				n.ConnectUnconnectedClusterPeer(n.peerList)
+			}
+			case protocol.AllClusterList: {
+				n.snList = CopyCluster(n.snList, msg.SnList)
+				n.peerList = CopyCluster(n.peerList, msg.PeerList)
+				n.ConnectUnconnectedClusterPeer(n.snList)
 				n.ConnectUnconnectedClusterPeer(n.peerList)
 			}
 			case protocol.SNList: {
@@ -180,10 +187,18 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config) {
 		fmt.Printf("%s/ipfs/%s\n", a, libp2ppeer.Encode(n.self.Id))
 	}
 
-	if n.self.Mode == peer.SuperNode || n.self.Mode == peer.SSPNode {
-		// start a service waiting for the node to enter the cluster
-		go n.StartNewNodeEntryService(cfg)
+	switch n.self.Mode {
+		case peer.SSPNode: {
+			go n.StartNewNodeEntryService(cfg)
+			go n.StartAliveTest(cluster.SNList,120)
+			go n.StartAliveTest(cluster.PeerList, 60)
+		}
+		case peer.SuperNode: {
+			go n.StartNewNodeEntryService(cfg)
+			go n.StartAliveTest(cluster.PeerList, 60)
+		}
 	}
+
 	// 监听设置好的proxy端口, 将http请求转发到这个端口上, 然后端口将stream转发给remote proxy
 	// 如果没有remote peer, 自己处理端口的请求
 	n.listenOnProxy(ctx)
@@ -289,22 +304,16 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 
 				// 将peerList发给这个peer
 				peerInfoList := ConstructSendableNodesList(n.peerList)
+				SNInfoList := ConstructSendableNodesList(n.snList)
 				msg := Message{
-					Operand: protocol.PeerList,
+					Operand: protocol.AllClusterList,
 					PeerList: cluster.Cluster{
 						Id: n.peerList.Id,
 						Snid: n.peerList.Snid,
 						Nodes: peerInfoList,
 						Position: n.peerList.Position,
 					},
-				}
-				conn.Write(EncodeMessageToGobObject(msg).Bytes())
-
-				// 将snlist发给这个peer
-				SNInfoList := ConstructSendableNodesList(n.snList)
-				msg = Message{
-					Operand: protocol.SNList,
-					PeerList: cluster.Cluster{
+					SnList: cluster.Cluster{
 						Id: n.peerList.Id,
 						Snid: n.peerList.Snid,
 						Nodes: SNInfoList,
@@ -349,13 +358,39 @@ func (n *node) StartNewNodeEntryService(cfg *config.Config) {
 					return
 				}
 			}
+			fmt.Println("test")
 			msg := Message{Operand: protocol.EXIT}
 			conn.Write(EncodeMessageToGobObject(msg).Bytes())
+			fmt.Println("??? why")
 		}()
 	}
 }
 
-func (n *node) StartAliveTest(clusterType int) {
+func (n *node) StartAliveTest(clusterType int, period int) {
+	// 创建一个timer设置在10s后执行
+	timer := time.NewTimer(time.Second)
+	switch clusterType {
+		case cluster.SNList: {
+			for {
+					timer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
+					select {
+						case <-timer.C: {
+							fmt.Println("snlist test")
+						}
+				}
+			}
+		}
+		case cluster.PeerList: {
+			for {
+					timer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
+					select {
+						case <-timer.C: {
+							fmt.Println("peer list test")
+						}
+				}
+			}
+		}
+	}
 
 }
 
