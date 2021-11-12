@@ -11,7 +11,9 @@ const (
 
 	PeerList = 101
 
-	AssignSelfAsSupernode = 102
+	SNList = 102
 
-	ExistedSupernodeInSelfCluster = 103
+	AssignSelfAsSupernode = 103
+
+	ExistedSupernodeInSelfCluster = 104
 )
