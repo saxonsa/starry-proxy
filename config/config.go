@@ -37,7 +37,7 @@ type P2P struct {
 
 func InitConfig() (*Config, error) {
 	cfg := Config{}
-	bytes, err := ioutil.ReadFile("./config.json")
+	bytes, err := ioutil.ReadFile("./config/config.json")
 	if err != nil {
 		log.Fatalf("Fail to read config.json")
 		return nil, err

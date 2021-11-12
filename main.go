@@ -3,6 +3,7 @@ package main
 import (
 	"StarryProxy/config"
 	"StarryProxy/node"
+	"StarryProxy/parameters"
 	"StarryProxy/peer"
 	"context"
 	"log"
@@ -14,6 +15,11 @@ func main() {
 	cfg, err := config.InitConfig()
 	if err != nil {
 		log.Fatalln(err)
+	}
+
+	params, err := parameters.InitParameter()
+	if err != nil {
+		log.Fatalln(params)
 	}
 
 	// If we have a destination peer we will start a local server
@@ -34,7 +40,7 @@ func main() {
 
 		n.Serve(ctx, cfg)
 	} else {
-		p, err := peer.New(ctx, cfg, peer.SuperNode)
+		p, err := peer.New(ctx, cfg, peer.SSPNode)
 		if err != nil {
 			log.Fatalln("Fail to create a peer for the first node")
 		}
