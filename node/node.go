@@ -10,6 +10,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 
 	"StarryProxy/cluster"
 	"StarryProxy/config"
@@ -145,6 +147,16 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 }
 
 func (n *node) Serve(ctx context.Context, cfg *config.Config) {
+
+	// do something when node quit
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt)
+	go func() {
+		<-ch
+		fmt.Println("node quit!")
+		os.Exit(0)
+	}()
+
 	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
 
