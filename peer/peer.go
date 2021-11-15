@@ -17,7 +17,7 @@ import (
 type Mode int32
 
 const (
-	SSPNode = iota
+	MasterNode = iota
 	SuperNode
 	NormalNode
 )
@@ -38,6 +38,8 @@ type Peer struct {
 	Position ip.Position
 
 	BandWidth int
+
+	Backup bool
 }
 
 func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {

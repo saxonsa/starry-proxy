@@ -6,7 +6,6 @@ import (
 	"StarryProxy/parameters"
 	"StarryProxy/peer"
 	"context"
-	"fmt"
 	"log"
 )
 
@@ -17,8 +16,6 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	fmt.Println(cfg.Demo)
 
 	params, err := parameters.InitParameter()
 	if err != nil {
@@ -41,9 +38,9 @@ func main() {
 		}
 		n.ConnectToNet(ctx, cfg, p.RemotePeer)
 
-		n.Serve(ctx, cfg, params)
+		n.Serve(ctx, params)
 	} else {
-		p, err := peer.New(ctx, cfg, peer.SSPNode)
+		p, err := peer.New(ctx, cfg, peer.MasterNode)
 		if err != nil {
 			log.Fatalln("Fail to create a peer for the first node")
 		}
@@ -56,6 +53,6 @@ func main() {
 		n.ConnectToNet(ctx, cfg, "")
 
 		// start service
-		n.Serve(ctx, cfg, params)
+		n.Serve(ctx, params)
 	}
 }

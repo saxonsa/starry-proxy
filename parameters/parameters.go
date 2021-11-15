@@ -7,14 +7,15 @@ import (
 	"log"
 )
 
-type Period struct {
+type HeartBeat struct {
 	SnList int `json:"SnList"`
 	PeerList int `json:"PeerList"`
 }
 
 type Parameter struct {
-	Delay float64 `json:"Delay"`
-	Period Period `json:"Period"`
+	HeartBeat HeartBeat `json:"HeartBeat"`
+	BandWidth float64 `json:"BandWidth"`
+	ClusterUpdate float64 `json:"ClusterUpdate"`
 }
 
 func InitParameter() (*Parameter, error) {
@@ -26,9 +27,10 @@ func InitParameter() (*Parameter, error) {
 	}
 	err = json.Unmarshal(bytes, &params)
 
-	flag.Float64Var(&params.Delay, "delay", params.Delay, "delay for transmit http request")
-	flag.IntVar(&params.Period.SnList, "sn_period", params.Period.SnList, "period to do heart beat test for snList")
-	flag.IntVar(&params.Period.PeerList, "peer_period", params.Period.PeerList, "period to do heart beat test for PeerList")
+	flag.Float64Var(&params.BandWidth, "bandwidth", params.BandWidth, "init a bandwidth for testing")
+	flag.IntVar(&params.HeartBeat.SnList, "sn_period", params.HeartBeat.SnList, "period to do heart beat test for snList")
+	flag.IntVar(&params.HeartBeat.PeerList, "peer_period", params.HeartBeat.PeerList, "period to do heart beat test for PeerList")
+	flag.Float64Var(&params.ClusterUpdate, "ClusterUpdate", params.ClusterUpdate, "cluster update period")
 	flag.Parse()
 
 	return &params, nil
