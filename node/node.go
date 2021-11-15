@@ -69,10 +69,6 @@ type Message struct {
 	Sender peer.Peer
 }
 
-type Ping struct {
-	Bandwidth int
-}
-
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
 	// The first node entered the p2p net
 	if n.self.Mode == peer.SSPNode {

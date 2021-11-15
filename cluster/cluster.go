@@ -5,6 +5,7 @@ import (
 	"StarryProxy/ip"
 	"StarryProxy/peer"
 	libp2ppeer "github.com/libp2p/go-libp2p-core/peer"
+	"math/rand"
 )
 
 const (
@@ -19,6 +20,7 @@ type AbsCluster interface {
 	AddPeer(p peer.Peer) error
 	RemovePeer(pid libp2ppeer.ID) string
 	FindSuperNodeInPosition(position ip.Position) *peer.Peer
+	FindRandomPeer() *peer.Peer
 }
 
 type Cluster struct {
@@ -73,6 +75,12 @@ func (c *Cluster) FindSuperNodeInPosition(position ip.Position) *peer.Peer {
 
 func (c *Cluster) GetClusterID() string {
 	return c.Id
+}
+
+func (c *Cluster) FindRandomPeer() *peer.Peer {
+	// 真的就是很随机... -_-
+	index := rand.Intn(c.GetClusterSize() - 1)
+	return &c.Nodes[index]
 }
 
 func clusterName(position string, mode int) string {
