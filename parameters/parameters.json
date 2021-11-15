@@ -1,7 +1,8 @@
 {
-  "Period": {
+  "HeartBeat": {
     "SnList": 25,
     "PeerList": 10
   },
+  "ClusterUpdate": 60,
   "BandWidth": 1.0
 }

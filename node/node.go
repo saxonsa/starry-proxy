@@ -29,7 +29,7 @@ import (
 )
 
 type Node interface {
-	Serve(ctx context.Context, cfg *config.Config, params *parameters.Parameter)
+	Serve(ctx context.Context, params *parameters.Parameter)
 
 	ConnectToNet(ctx context.Context, cfg *config.Config, superNode libp2ppeer.ID)
 }
@@ -67,16 +67,18 @@ type Message struct {
 	PeerList cluster.Cluster
 	ExistedSupernode peer.Peer // 如果访问的peer所在的区域已经有supernode, 将supernode的信息发给peer
 	Sender peer.Peer
+	NewSN peer.Peer
+	ClusterType int
 }
 
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
 	// The first node entered the p2p net
-	if n.self.Mode == peer.SSPNode {
+	if n.self.Mode == peer.MasterNode {
 		fmt.Println("enter p2p net test")
 
 		if cfg.Demo {
 			params := make(map[string]string)
-			params["mode"] = string(rune(peer.SSPNode))
+			params["mode"] = string(rune(peer.MasterNode))
 			params["peer_id"] = string(n.self.Id)
 			params["peer_name"] = cfg.Name
 			params["province"] = n.self.Position.Province
@@ -165,19 +167,191 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 	}
 }
 
-func (n *node) Serve(ctx context.Context, cfg *config.Config, params *parameters.Parameter) {
+func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
+
+	// 随机一个remote peer
+	remotePeer := n.peerList.FindRandomPeer(n.self.Id)
+	if remotePeer != nil {
+		n.self.RemotePeer = remotePeer.Id
+	}
 
 	// do something when node quit
 	ch := make(chan os.Signal)
 	signal.Notify(ch, os.Interrupt)
 	go func() {
 		<-ch
+		//switch n.self.Mode {
+		//case peer.NormalNode:
+		//	{
+		//		if n.peerList.GetClusterSize() == 1 {
+		//			return
+		//		}
+		//		for _, p := range n.peerList.Nodes {
+		//			if p.Id == n.self.Id {
+		//				continue
+		//			}
+		//			conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+		//			if err == nil {
+		//				msg := Message{
+		//					Operand: protocol.NodeLeave,
+		//					Sender: peer.Peer{
+		//						Id: p.Id,
+		//						Mode: peer.NormalNode,
+		//					},
+		//				}
+		//				log.Println("告诉peerList中的node自己离开")
+		//				conn.Write(EncodeMessageToGobObject(msg).Bytes())
+		//			}
+		//		}
+		//	}
+		//case peer.SuperNode:
+		//	{
+		//		// 选择第二个为SN
+		//		secondRankPeer, str := n.peerList.FindSecondRankPeer()
+		//		if str != "" {
+		//			log.Println(str)
+		//			return
+		//		}
+		//		conn, err := gostream.Dial(ctx, n.self.Host, secondRankPeer.Id, protocol.CommonManageProtocol)
+		//		if err != nil {
+		//			fmt.Printf("fail to assign the second node as SN: %s\n", err)
+		//		}
+		//		msg := Message{
+		//			Operand: protocol.AssignSelfAsSupernode,
+		//			ClusterType: cluster.PeerList,
+		//		}
+		//		log.Println("assign second node as SN")
+		//		conn.Write(EncodeMessageToGobObject(msg).Bytes())
+		//
+		//		// 告诉所有的SN自己的离开
+		//		for _, p := range n.snList.Nodes {
+		//			if p.Id == n.self.Id {
+		//				continue
+		//			}
+		//			conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+		//			if err == nil {
+		//				msg := Message{
+		//					Operand: protocol.NodeLeave,
+		//					Sender: peer.Peer{
+		//						Id: p.Id,
+		//						Mode: peer.SuperNode,
+		//					},
+		//				}
+		//				log.Println("告诉snlist中的node自己离开")
+		//				conn.Write(EncodeMessageToGobObject(msg).Bytes())
+		//			}
+		//		}
+		//
+		//		// 向PeerList广播自己的离开
+		//		for _, p := range n.peerList.Nodes {
+		//			if p.Id == n.self.Id {
+		//				continue
+		//			}
+		//			conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+		//			if err == nil {
+		//				msg := Message{
+		//					Operand: protocol.NodeLeave,
+		//					Sender: peer.Peer{
+		//						Id: p.Id,
+		//						Mode: peer.SuperNode,
+		//					},
+		//					PeerList: cluster.Cluster{
+		//						Snid: secondRankPeer.Id,
+		//					},
+		//					NewSN: peer.Peer{
+		//						Id: secondRankPeer.Id,
+		//						Mode: peer.SuperNode,
+		//						P2PPort: secondRankPeer.P2PPort,
+		//						Position: secondRankPeer.Position,
+		//					},
+		//				}
+		//				log.Println("SN 告诉peerList中的node自己离开")
+		//				conn.Write(EncodeMessageToGobObject(msg).Bytes())
+		//			}
+		//		}
+		//	}
+		//case peer.MasterNode:
+		//	{
+		//		// 给自己cluster的peer选supernode
+		//		if n.peerList.GetClusterSize() == 1 {
+		//			break
+		//		}
+		//		secondRankPeer, str := n.peerList.FindSecondRankPeer()
+		//		if str != "" {
+		//			log.Println(str)
+		//			return
+		//		}
+		//		conn, err := gostream.Dial(ctx, n.self.Host, secondRankPeer.Id, protocol.CommonManageProtocol)
+		//		if err != nil {
+		//			fmt.Printf("fail to assign the second node as SN: %s\n", err)
+		//		}
+		//		msg := Message{
+		//			Operand: protocol.AssignSelfAsSupernode,
+		//			ClusterType: cluster.PeerList,
+		//		}
+		//		log.Println("assign second node as SN")
+		//		conn.Write(EncodeMessageToGobObject(msg).Bytes())
+		//
+		//		// 给SnList选SN
+		//		secondRankPeer, str = n.snList.FindSecondRankPeer()
+		//		if str != "" {
+		//			break
+		//		}
+		//		conn, err = gostream.Dial(ctx, n.self.Host, secondRankPeer.Id, protocol.CommonManageProtocol)
+		//		if err != nil {
+		//			fmt.Printf("fail to assign the second node as SSN: %s\n", err)
+		//		}
+		//		msg := Message{
+		//			Operand: protocol.AssignSelfAsSupernode,
+		//			ClusterType: cluster.SNList,
+		//		}
+		//		log.Println("assign second node as SSN")
+		//		conn.Write(EncodeMessageToGobObject(msg).Bytes())
+		//
+		//		// 告诉所有的SN自己的离开
+		//		for _, p := range n.snList.Nodes {
+		//			if p.Id == n.self.Id {
+		//				continue
+		//			}
+		//			conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+		//			if err == nil {
+		//				msg := Message{
+		//					Operand: protocol.NodeLeave,
+		//					Sender: peer.Peer{
+		//						Id: p.Id,
+		//						Mode: peer.MasterNode,
+		//					},
+		//					SnList: cluster.Cluster{
+		//						Snid: secondRankPeer.Id,
+		//					},
+		//					NewSN: peer.Peer{
+		//						Id: secondRankPeer.Id,
+		//						Mode: peer.SuperNode,
+		//						P2PPort: secondRankPeer.P2PPort,
+		//						Position: secondRankPeer.Position,
+		//					},
+		//				}
+		//				log.Println("告诉snlist中的node自己离开")
+		//				conn.Write(EncodeMessageToGobObject(msg).Bytes())
+		//			}
+		//		}
+		//	}
+		//}
 		fmt.Println("node quit!")
 		os.Exit(0)
 	}()
 
+	// 启动 CommonManageProtocol, 更新SNList, PeerList, 接收心跳测试
+	go n.StartService(ctx, params)
+
 	// 启动proxy service, 监听 gostream <commonProtocol>, 将收到的http请求用goproxy处理掉
 	go n.StartProxyService()
+
+	// 处理新的node加入
+	go n.StartNewNodeEntryService()
+
+	// supernode启动更新cluster服务
+	//go n.StartUpdateClusterService()
 
 	fmt.Println("Proxy server is ready")
 	fmt.Println("libp2p-peer addresses:")
@@ -185,23 +359,154 @@ func (n *node) Serve(ctx context.Context, cfg *config.Config, params *parameters
 		fmt.Printf("%s/ipfs/%s\n", a, libp2ppeer.Encode(n.self.Id))
 	}
 
-	go n.ListenUpdatedCluster()
-	go n.StartAliveTestAck()
-	go n.StartNewNodeEntryService()
-
 	switch n.self.Mode {
-		case peer.SSPNode: {
-			go n.StartAliveTest(ctx, cluster.SNList, params.Period.SnList)
-			go n.StartAliveTest(ctx, cluster.PeerList, params.Period.PeerList)
+		case peer.MasterNode: {
+			go n.StartAliveTest(ctx, cluster.SNList, params.HeartBeat.SnList)
+			go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
 		}
 		case peer.SuperNode: {
-			go n.StartAliveTest(ctx, cluster.PeerList, params.Period.PeerList)
+			go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
 		}
 	}
 
 	// 监听设置好的proxy端口, 将http请求转发到这个端口上, 然后端口将stream转发给remote proxy
 	// 如果没有remote peer, 自己处理端口的请求
 	n.listenOnProxy(ctx)
+}
+
+func (n *node) StartUpdateClusterService(params *parameters.Parameter) {
+	// 创建一个timer设置在10s后执行
+	timer := time.NewTimer(time.Second)
+	for {
+		timer.Reset(time.Duration(params.ClusterUpdate) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
+		select {
+		case <-timer.C:
+			{
+
+			}
+		}
+	}
+}
+
+// StartService 启动 CommonManageProtocol, 更新SNList, PeerList, 接收心跳测试
+func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
+	l, err := gostream.Listen(n.self.Host, protocol.CommonManageProtocol)
+	if err != nil {
+		log.Println(err)
+	}
+	defer l.Close()
+	for {
+		conn, _ := l.Accept()
+		go func() {
+			msg := DecodeGobObjectIntoMessage(conn)
+			switch msg.Operand {
+			case protocol.UpdateSNList: { // 接收更新的SNList
+				n.snList = CopyCluster(n.snList, msg.SnList)
+
+				// 将snlist中和自己没有连接起来的连起来
+				n.ConnectUnconnectedClusterPeer(n.snList)
+
+				// 删除需要删除的
+
+			}
+			case protocol.UpdatePeerList: { // 接收更新的PeerList
+				n.peerList = CopyCluster(n.peerList, msg.PeerList)
+				n.ConnectUnconnectedClusterPeer(n.peerList)
+
+				// 删除需要删除的
+			}
+			case protocol.AliveTest: { // 接收心跳测试
+				log.Println("接收到alivetest")
+				//msg := Message{
+				//	Operand: protocol.AliveTestAck,
+				//}
+				//log.Println("回复ack")
+				//conn.Write(EncodeMessageToGobObject(msg).Bytes())
+			}
+			case protocol.AssignSelfAsSupernode: {
+
+				if msg.ClusterType == cluster.PeerList {
+					go n.StartNewNodeEntryService()
+					n.peerList.Snid= n.self.Id
+					go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
+
+				} else { // SSN
+					n.snList.Snid= n.self.Id
+					go n.StartAliveTest(ctx, cluster.SNList, params.HeartBeat.SnList)
+					go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
+				}
+			}
+			case protocol.NodeLeave: {
+				n.self.Host.Peerstore().ClearAddrs(msg.Sender.Id)
+				switch msg.Sender.Mode {
+				case peer.NormalNode: {
+					n.peerList.RemovePeer(msg.Sender.Id)
+				}
+				case peer.SuperNode: {
+					if n.self.Mode == peer.SuperNode || n.self.Mode == peer.MasterNode {
+						n.snList.RemovePeer(msg.Sender.Id)
+
+						// 广播给所有的peerList
+						for _, p := range n.peerList.Nodes {
+							conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+							if err != nil {
+								fmt.Printf("fail to broadcast peerList: %s\n", err)
+							}
+
+							SNInfoList :=  ConstructSendableNodesList(n.snList)
+							msg := Message{
+								Operand: protocol.UpdateSNList,
+								SnList: cluster.Cluster{
+									Id: n.snList.Id,
+									Snid: n.snList.Snid,
+									Nodes: SNInfoList,
+									Position: n.snList.Position,
+								},
+							}
+							conn.Write(EncodeMessageToGobObject(msg).Bytes())
+						}
+
+					} else { // normal node
+						n.peerList.RemovePeer(msg.Sender.Id)
+
+						// 切换SN
+						n.peerList.Snid = msg.PeerList.Snid
+						peer.AddAddrToPeerstore(n.self.Host, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s",
+							msg.NewSN.P2PPort, msg.NewSN.Id))
+					}
+				}
+				case peer.MasterNode: {
+					n.snList.RemovePeer(msg.Sender.Id)
+
+					n.snList.Snid = msg.SnList.Snid
+					peer.AddAddrToPeerstore(n.self.Host, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s",
+						msg.NewSN.P2PPort, msg.NewSN.Id))
+
+					// 广播给所有的peerList
+					for _, p := range n.peerList.Nodes {
+						conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+						if err != nil {
+							fmt.Printf("fail to broadcast peerList: %s\n", err)
+						}
+
+						SNInfoList :=  ConstructSendableNodesList(n.snList)
+						msg := Message{
+							Operand: protocol.UpdateSNList,
+							SnList: cluster.Cluster{
+								Id: n.snList.Id,
+								Snid: n.snList.Snid,
+								Nodes: SNInfoList,
+								Position: n.snList.Position,
+							},
+						}
+						conn.Write(EncodeMessageToGobObject(msg).Bytes())
+					}
+				}
+				}
+			}
+			}
+		}()
+	}
 }
 
 func (n *node) listenOnProxy(ctx context.Context) {
@@ -371,60 +676,6 @@ func (n *node) StartNewNodeEntryService() {
 	}
 }
 
-// ListenUpdatedCluster 更新最新传来的cluster
-func (n *node) ListenUpdatedCluster() {
-	l, err := gostream.Listen(n.self.Host, protocol.UpdateClusterProtocol)
-	if err != nil {
-		log.Println(err)
-	}
-	defer l.Close()
-	for {
-		conn, _ := l.Accept()
-		go func() {
-			msg := DecodeGobObjectIntoMessage(conn)
-			switch msg.Operand {
-			case protocol.SNList: {
-				n.snList = CopyCluster(n.snList, msg.SnList)
-
-				// 将snlist中和自己没有连接起来的连起来
-				n.ConnectUnconnectedClusterPeer(n.snList)
-			}
-			case protocol.PeerList: {
-				n.peerList = CopyCluster(n.peerList, msg.PeerList)
-				n.ConnectUnconnectedClusterPeer(n.peerList)
-			}
-			}
-		}()
-	}
-}
-
-func (n *node) StartAliveTestAck() {
-	l, err := gostream.Listen(n.self.Host, protocol.NodeAliveTestProtocol)
-	if err != nil {
-		log.Println(err)
-	}
-	defer l.Close()
-
-	for {
-		conn, _ := l.Accept()
-		defer conn.Close()
-
-		go func() {
-			msg := DecodeGobObjectIntoMessage(conn)
-			switch msg.Operand {
-			case protocol.AliveTest: {
-				log.Println("接受到alivetest")
-				//msg := Message{
-				//	Operand: protocol.AliveTestAck,
-				//}
-				//log.Println("回复ack")
-				//conn.Write(EncodeMessageToGobObject(msg).Bytes())
-			}
-			}
-		}()
-	}
-}
-
 // StartAliveTest 测定peer的存活, 并且用于测量bandwidth
 func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) {
 	// 创建一个timer设置在10s后执行
@@ -439,7 +690,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 					if peer.Id == n.self.Id {
 						continue
 					}
-					conn, err := gostream.Dial(ctx, n.self.Host, peer.Id, protocol.NodeAliveTestProtocol)
+					conn, err := gostream.Dial(ctx, n.self.Host, peer.Id, protocol.CommonManageProtocol)
 					if err == nil {
 						msg := Message{
 							Operand: protocol.AliveTest,
@@ -459,7 +710,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 							if p.Id == n.self.Id {
 								continue
 							}
-							newConn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.UpdateClusterProtocol)
+							newConn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
 							if err != nil {
 								log.Printf("fail to build updateClusterProtocol: %s\n", err)
 							}
@@ -468,7 +719,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 							peerInfoList := ConstructSendableNodesList(n.snList)
 
 							msg := Message{
-								Operand: protocol.SNList,
+								Operand: protocol.UpdateSNList,
 								SnList: cluster.Cluster{
 									Id: n.snList.Id,
 									Snid: n.snList.Snid,
@@ -495,7 +746,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 						if peer.Id == n.self.Id {
 							continue
 						}
-						conn, err := gostream.Dial(ctx, n.self.Host, peer.Id, protocol.NodeAliveTestProtocol)
+						conn, err := gostream.Dial(ctx, n.self.Host, peer.Id, protocol.CommonManageProtocol)
 						if err == nil {
 							msg := Message{
 								Operand: protocol.AliveTest,
@@ -515,7 +766,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 								if p.Id == n.self.Id {
 									continue
 								}
-								newConn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.UpdateClusterProtocol)
+								newConn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
 								if err != nil {
 									log.Printf("fail to build updateClusterProtocol: %s\n", err)
 								}
@@ -524,7 +775,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 								peerInfoList := ConstructSendableNodesList(n.peerList)
 
 								msg := Message{
-									Operand: protocol.SNList,
+									Operand: protocol.UpdatePeerList,
 									SnList: cluster.Cluster{
 										Id: n.snList.Id,
 										Snid: n.snList.Snid,

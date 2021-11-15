@@ -5,9 +5,7 @@ const (
 
 	NewNodeProtocol = "/starry-proxy/new-node-entry/0.0.1"
 
-	NodeAliveTestProtocol = "/starry-proxy/node-alive-test-protocol/0.0.1"
-
-	UpdateClusterProtocol = "/starry-proxy/update-cluster-protocol/0.0.1"
+	CommonManageProtocol = "/starry-proxy/common-manage-protocol/0.0.1"
 )
 
 const (
@@ -16,6 +14,10 @@ const (
 	PeerList
 
 	SNList
+
+	UpdatePeerList
+
+	UpdateSNList
 
 	AllClusterList
 
@@ -26,4 +28,6 @@ const (
 	AliveTest
 
 	AliveTestAck
+
+	NodeLeave
 )
