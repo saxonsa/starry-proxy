@@ -21,6 +21,10 @@ type Config struct {
 	Position ip.Position `json:"Position"`
 
 	IP string `json:"IP"`
+
+	Name string `json:"Name"`
+
+	Demo bool `json:"Demo"`
 }
 
 type Node struct {
@@ -55,6 +59,9 @@ func InitConfig() (*Config, error) {
 	flag.IntVar(&cfg.P2P.Port, "p2p", cfg.P2P.Port, "p2p port")
 	flag.StringVar(&cfg.Position.Province, "province", cfg.Position.Province, "province")
 	flag.StringVar(&cfg.Position.City, "city", cfg.Position.City, "city")
+	flag.StringVar(&cfg.Name, "", cfg.Name, "p2p node name")
+	flag.BoolVar(&cfg.Demo, "demo", cfg.Demo, "")
+
 	flag.Parse()
 
 	return &cfg, nil
