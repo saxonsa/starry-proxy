@@ -17,6 +17,7 @@ type AbsCluster interface {
 	GetClusterSize() int
 	GetClusterPosition() ip.Position
 	AddPeer(p peer.Peer) error
+	RemovePeer(pid libp2ppeer.ID) string
 	FindSuperNodeInPosition(position ip.Position) *peer.Peer
 }
 
@@ -31,10 +32,9 @@ func New(p peer.Peer, cfg *config.Config, mode int) (Cluster, error) {
 	position := ip.Position{Province: cfg.Position.Province, City: cfg.Position.City}
 	cluster := Cluster{Snid: p.Id, Nodes: make([]peer.Peer, 0), Position: position}
 	cluster.Nodes = append(cluster.Nodes, p)
-	//cluster.Nodes[p.Id] = p
 
 	// generate cluster id
-	cluster.Id = clusterName(shortID(p.Id), mode)
+	cluster.Id = clusterName(p.Position.Province + " " + p.Position.City, int(p.Mode))
 
 	return cluster, nil
 }
@@ -52,6 +52,16 @@ func (c *Cluster) AddPeer(p peer.Peer) error {
 	return nil
 }
 
+func (c *Cluster) RemovePeer(pid libp2ppeer.ID) string {
+	for index, p := range c.Nodes {
+		if p.Id == pid {
+			c.Nodes = append(c.Nodes[:index], c.Nodes[index+1:]...)
+			return ""
+		}
+	}
+	return "Peer Not Found"
+}
+
 func (c *Cluster) FindSuperNodeInPosition(position ip.Position) *peer.Peer {
 	for _, p := range c.Nodes {
 		if p.Position == position {
@@ -65,15 +75,10 @@ func (c *Cluster) GetClusterID() string {
 	return c.Id
 }
 
-func shortID(p libp2ppeer.ID) string {
-	pretty := p.Pretty()
-	return pretty[len(pretty)-8:]
-}
-
-func clusterName(clusterId string, mode int) string {
+func clusterName(position string, mode int) string {
 	if mode == PeerList {
-		return "PeerCluster:" + clusterId
+		return "PeerCluster:" + position
 	} else {
-		return "SNCluster:" + clusterId
+		return "SNCluster:" + position
 	}
 }

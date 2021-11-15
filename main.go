@@ -6,6 +6,7 @@ import (
 	"StarryProxy/parameters"
 	"StarryProxy/peer"
 	"context"
+	"fmt"
 	"log"
 )
 
@@ -16,6 +17,8 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	fmt.Println(cfg.Demo)
 
 	params, err := parameters.InitParameter()
 	if err != nil {
@@ -38,7 +41,7 @@ func main() {
 		}
 		n.ConnectToNet(ctx, cfg, p.RemotePeer)
 
-		n.Serve(ctx, cfg)
+		n.Serve(ctx, cfg, params)
 	} else {
 		p, err := peer.New(ctx, cfg, peer.SSPNode)
 		if err != nil {
@@ -53,6 +56,6 @@ func main() {
 		n.ConnectToNet(ctx, cfg, "")
 
 		// start service
-		n.Serve(ctx, cfg)
+		n.Serve(ctx, cfg, params)
 	}
 }

@@ -1,3 +1,7 @@
 {
+  "Period": {
+    "SnList": 25,
+    "PeerList": 10
+  },
   "Delay": 3
 }
