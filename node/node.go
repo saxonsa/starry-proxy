@@ -52,6 +52,7 @@ type listener struct {
 }
 
 func New(peer peer.Peer) (Node, error) {
+	gob.Register(Message{})
 	node := node{self: peer}
 	return &node, nil
 }
@@ -77,7 +78,6 @@ type Message struct {
 }
 
 func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2ppeer.ID) {
-	gob.Register(Message{})
 	// The first node entered the p2p net
 	if n.self.Mode == peer.MasterNode {
 		fmt.Println("enter p2p net test")
@@ -147,7 +147,7 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				n.ConnectUnconnectedClusterPeer(n.snList)
 			}
 			case protocol.AssignSelfAsSupernode: {
-				go n.StartNewNodeEntryService()
+				n.self.Mode = peer.SuperNode
 				n.peerList, _ = cluster.New(n.self, cfg)
 
 				// copy msg.Snlist into n.snlist
@@ -157,6 +157,8 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				n.ConnectUnconnectedClusterPeer(n.snList)
 			}
 			case protocol.ExistedSupernodeInSelfCluster: {
+				log.Println("get a new SN peer info")
+
 				// 获取supernode的peer信息
 				dest := peer.AddAddrToPeerstore(
 					n.self.Host,
@@ -177,7 +179,6 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 
 	// 随机一个remote peer
-	log.Println(n.peerList.GetClusterSize())
 	remotePeer := n.peerList.FindRandomPeer(n.self.Id)
 	if remotePeer != nil {
 		n.self.RemotePeer = remotePeer.Id
@@ -358,7 +359,6 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 	// 处理新的node加入
 	go n.StartNewNodeEntryService()
 
-	fmt.Println("Proxy server is ready")
 	fmt.Println("libp2p-peer addresses:")
 	for _, a := range n.self.Host.Addrs() {
 		fmt.Printf("%s/ipfs/%s\n", a, libp2ppeer.Encode(n.self.Id))
@@ -418,7 +418,6 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 			case protocol.AssignSelfAsSupernode: {
 
 				if msg.ClusterType == cluster.PeerList {
-					go n.StartNewNodeEntryService()
 					n.peerList.Snid= n.self.Id
 					go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
 
@@ -533,8 +532,9 @@ func (n *node) BackupService(on bool, clusterType int) {
 	switch clusterType {
 	case cluster.SNList: {
 		if on {
-			log.Println("开启snList backup服务")
+			log.Println("开启SNList backup服务")
 			n.self.Service.SnListBackup = true
+			//HandleBackupServive()
 		} else {
 			log.Println("关闭SNList backup服务")
 			n.self.Service.SnListBackup = false
@@ -542,6 +542,7 @@ func (n *node) BackupService(on bool, clusterType int) {
 	}
 	case cluster.PeerList: {
 		if on {
+			//HandleBackupServive()
 			log.Println("开启peerList backup服务")
 			n.self.Service.PeerListBackup = true
 		} else {
@@ -711,8 +712,15 @@ func (n *node) StartNewNodeEntryService() {
 					conn.Write(EncodeMessageToGobObject(msg).Bytes())
 				} else {
 					// found a supernode in current peer's position(cluster)
-					msg := Message{Operand: protocol.ExistedSupernodeInSelfCluster, ExistedSupernode: *p}
+					msg := Message{Operand: protocol.ExistedSupernodeInSelfCluster, ExistedSupernode: peer.Peer{
+						Id: p.Id,
+						P2PPort: p.P2PPort,
+						Mode: p.Mode,
+					}}
 					conn.Write(EncodeMessageToGobObject(msg).Bytes())
+
+					// 将这个peer从自己的ps中删除
+					n.self.Host.Peerstore().ClearAddrs(pInfo.Id)
 
 					return
 				}
@@ -822,11 +830,12 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 						OriConn, err := gostream.Dial(ctx, n.self.Host, n.snList.Backup, protocol.CommonManageProtocol)
 						if err != nil {
 							log.Printf("fail to dial backup: %s\n", err)
+						} else {
+							msg := Message{
+								Operand: protocol.OffSnListBackup,
+							}
+							OriConn.Write(EncodeMessageToGobObject(msg).Bytes())
 						}
-						msg := Message{
-							Operand: protocol.OffSnListBackup,
-						}
-						OriConn.Write(EncodeMessageToGobObject(msg).Bytes())
 
 						// 告诉新的backup成为backup
 						conn, err := gostream.Dial(ctx, n.self.Host, secondRankPeer.Id, protocol.CommonManageProtocol)
@@ -834,7 +843,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 							log.Printf("fail to dial backup: %s\n", err)
 						}
 						n.snList.Backup = secondRankPeer.Id
-						msg = Message{
+						msg := Message{
 							Operand: protocol.RaiseSnListBackup,
 						}
 						conn.Write(EncodeMessageToGobObject(msg).Bytes())

@@ -35,11 +35,11 @@ type Cluster struct {
 }
 
 func New(p peer.Peer, cfg *config.Config) (Cluster, error) {
+	log.Println("创建Cluster")
+
 	position := ip.Position{Province: cfg.Position.Province, City: cfg.Position.City}
 	cluster := Cluster{Snid: p.Id, Nodes: make([]peer.Peer, 0), Position: position}
 	cluster.Nodes = append(cluster.Nodes, p)
-
-	log.Printf("cluster size: %d\n", cluster.GetClusterSize())
 
 	// generate cluster id
 	cluster.Id = clusterName(p.Position.Province + " " + p.Position.City, int(p.Mode))
@@ -90,7 +90,12 @@ func (c *Cluster) FindRandomPeer(pid libp2ppeer.ID) *peer.Peer {
 		if r == 0 {
 			return nil
 		}
-		log.Printf("test rand int: %d\n", r)
+
+		if r < 0 {
+			log.Printf("error! cluster does not exist, test rand int: %d\n", r)
+		}
+
+
 		index := rand.Intn(r)
 		if c.Nodes[index].Id == pid {
 			continue

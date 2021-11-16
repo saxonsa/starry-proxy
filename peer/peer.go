@@ -137,9 +137,9 @@ func AddAddrToPeerstore(h host.Host, addr string) peer.ID {
 	// We have a peer ID and a targetAddr so we add
 	// it to the peerstore so LibP2P knows how to contact it
 	h.Peerstore().AddAddr(peerid, targetAddr, peerstore.PermanentAddrTTL)
-	for index, value := range h.Peerstore().Peers() {
-		fmt.Printf("peer %d, %s\n", index, value)
-	}
-	log.Printf("num of peers in peerstore: %d\n", h.Peerstore().Peers().Len())
+	//for index, value := range h.Peerstore().Peers() {
+	//	fmt.Printf("peer %d, %s\n", index, value)
+	//}
+	//log.Printf("num of peers in peerstore: %d\n", h.Peerstore().Peers().Len())
 	return peerid
 }
