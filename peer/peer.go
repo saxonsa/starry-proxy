@@ -43,6 +43,10 @@ type Peer struct {
 	Rate float64
 
 	Service service.Service
+
+	HeartBeatFromMaster bool // 检测是不是在一段时间内收到了来自master的heartbeat
+
+	HeartBeatFromSN bool // 检测是不是在一段时间内收到了来自SN的HeartBeat
 }
 
 func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
@@ -70,6 +74,8 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		ProxyAddr: proxyAddr,
 		Rate: cfg.Rate,
 		Service: *service,
+		HeartBeatFromSN: false,
+		HeartBeatFromMaster: false,
 	}, nil
 }
 
