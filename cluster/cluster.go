@@ -4,7 +4,9 @@ import (
 	"StarryProxy/config"
 	"StarryProxy/ip"
 	"StarryProxy/peer"
+
 	libp2ppeer "github.com/libp2p/go-libp2p-core/peer"
+	"log"
 	"math/rand"
 )
 
@@ -32,10 +34,12 @@ type Cluster struct {
 	Position ip.Position                 `json:"position"`
 }
 
-func New(p peer.Peer, cfg *config.Config, mode int) (Cluster, error) {
+func New(p peer.Peer, cfg *config.Config) (Cluster, error) {
 	position := ip.Position{Province: cfg.Position.Province, City: cfg.Position.City}
 	cluster := Cluster{Snid: p.Id, Nodes: make([]peer.Peer, 0), Position: position}
 	cluster.Nodes = append(cluster.Nodes, p)
+
+	log.Printf("cluster size: %d\n", cluster.GetClusterSize())
 
 	// generate cluster id
 	cluster.Id = clusterName(p.Position.Province + " " + p.Position.City, int(p.Mode))
@@ -86,7 +90,7 @@ func (c *Cluster) FindRandomPeer(pid libp2ppeer.ID) *peer.Peer {
 		if r == 0 {
 			return nil
 		}
-
+		log.Printf("test rand int: %d\n", r)
 		index := rand.Intn(r)
 		if c.Nodes[index].Id == pid {
 			continue
@@ -96,13 +100,13 @@ func (c *Cluster) FindRandomPeer(pid libp2ppeer.ID) *peer.Peer {
 }
 
 func (c *Cluster) FindSecondRankPeer() (*peer.Peer, string) {
-	maxBandwidth := 0
+	maxRate := 0.0
 	index := 0
 	for i, p := range c.Nodes {
 		if p.Id != c.Snid {
-			if p.BandWidth > maxBandwidth {
+			if p.Rate > maxRate {
 				index = i
-				maxBandwidth = p.BandWidth
+				maxRate = p.Rate
 			}
 		}
 	}

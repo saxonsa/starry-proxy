@@ -9,11 +9,15 @@ const (
 )
 
 const (
+	// EXIT newNodeProtocol -----------------------------------
+
 	EXIT = iota
 
 	PeerList
 
 	SNList
+
+	// CommonManageProtocol ------------------------
 
 	UpdatePeerList
 
@@ -30,4 +34,16 @@ const (
 	AliveTestAck
 
 	NodeLeave
+
+	RaiseSnListBackup
+
+	RaisePeerListBackup
+
+	OffSnListBackup
+
+	OffPeerListBackup
+
+	ChangeSnListBackup
+
+	ChangePeerListBackup
 )

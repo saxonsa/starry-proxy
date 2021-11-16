@@ -3,6 +3,7 @@ package peer
 import (
 	"StarryProxy/config"
 	"StarryProxy/ip"
+	"StarryProxy/node/service"
 	"context"
 	"fmt"
 	"github.com/libp2p/go-libp2p"
@@ -37,9 +38,11 @@ type Peer struct {
 
 	Position ip.Position
 
-	BandWidth int
-
 	Backup bool
+
+	Rate float64
+
+	Service service.Service
 }
 
 func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
@@ -55,6 +58,8 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		log.Fatalln(err)
 	}
 
+	service := service.InitService()
+
 	return &Peer{
 		Mode:     mode,
 		Host:     h,
@@ -63,6 +68,8 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		Position: cfg.Position,
 		RemotePeer: "",
 		ProxyAddr: proxyAddr,
+		Rate: cfg.Rate,
+		Service: *service,
 	}, nil
 }
 

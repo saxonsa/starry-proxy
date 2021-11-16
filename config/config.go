@@ -25,6 +25,8 @@ type Config struct {
 	Name string `json:"Name"`
 
 	Demo bool `json:"Demo"`
+
+	Rate float64 `json:"Rate"`
 }
 
 type Node struct {
@@ -61,6 +63,7 @@ func InitConfig() (*Config, error) {
 	flag.StringVar(&cfg.Position.City, "city", cfg.Position.City, "city")
 	flag.StringVar(&cfg.Name, "", cfg.Name, "p2p node name")
 	flag.BoolVar(&cfg.Demo, "demo", cfg.Demo, "")
+	flag.Float64Var(&cfg.Rate, "rate", cfg.Rate, "init rate for testing")
 
 	flag.Parse()
 
