@@ -437,11 +437,11 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 			case protocol.AssignSelfAsSupernode: {
 
 				if msg.ClusterType == cluster.PeerList {
-					n.peerList.Snid= n.self.Id
+					n.peerList.SN = n.self
 					go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
 
 				} else { // SSN
-					n.snList.Snid= n.self.Id
+					n.snList.SN = n.self
 					go n.StartAliveTest(ctx, cluster.SNList, params.HeartBeat.SnList)
 					go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
 				}
@@ -496,7 +496,7 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 								Operand: protocol.UpdateSNList,
 								SnList: cluster.Cluster{
 									Id: n.snList.Id,
-									Snid: n.snList.Snid,
+									SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
 									Nodes: SNInfoList,
 									Position: n.snList.Position,
 								},
@@ -508,7 +508,7 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 						n.peerList.RemovePeer(msg.Sender.Id)
 
 						// 切换SN
-						n.peerList.Snid = msg.PeerList.Snid
+						n.peerList.SN = peer.Peer{Id: msg.PeerList.SN.Id, P2PPort: msg.PeerList.SN.P2PPort}
 						peer.AddAddrToPeerstore(n.self.Host, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s",
 							msg.NewSN.P2PPort, msg.NewSN.Id))
 					}
@@ -516,7 +516,7 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 				case peer.MasterNode: {
 					n.snList.RemovePeer(msg.Sender.Id)
 
-					n.snList.Snid = msg.SnList.Snid
+					n.snList.SN = peer.Peer{Id: msg.SnList.SN.Id, P2PPort: msg.SnList.SN.P2PPort}
 					peer.AddAddrToPeerstore(n.self.Host, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s",
 						msg.NewSN.P2PPort, msg.NewSN.Id))
 
@@ -532,7 +532,7 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 							Operand: protocol.UpdateSNList,
 							SnList: cluster.Cluster{
 								Id: n.snList.Id,
-								Snid: n.snList.Snid,
+								SN: peer.Peer{Id: msg.SnList.SN.Id, P2PPort: msg.SnList.SN.P2PPort},
 								Nodes: SNInfoList,
 								Position: n.snList.Position,
 							},
@@ -683,14 +683,14 @@ func (n *node) StartNewNodeEntryService() {
 					Operand: protocol.AllClusterList,
 					PeerList: cluster.Cluster{
 						Id: n.peerList.Id,
-						Snid: n.peerList.Snid,
+						SN: peer.Peer{Id: n.peerList.SN.Id, P2PPort: n.peerList.SN.P2PPort},
 						Backup: "",
 						Nodes: peerInfoList,
 						Position: n.peerList.Position,
 					},
 					SnList: cluster.Cluster{
 						Id: n.snList.Id,
-						Snid: n.snList.Snid,
+						SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
 						Backup: "",
 						Nodes: SNInfoList,
 						Position: n.snList.Position,
@@ -721,7 +721,7 @@ func (n *node) StartNewNodeEntryService() {
 						Operand: protocol.AssignSelfAsSupernode,
 						SnList: cluster.Cluster{
 							Id: n.snList.Id,
-							Snid: n.snList.Snid,
+							SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
 							Nodes: peerInfoList, // nodes只有部分属性可以传过去
 							Position: n.snList.Position,
 						},
@@ -758,11 +758,11 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 			timer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
 			select {
 			case <-timer.C: {
-				for _, peer := range n.snList.Nodes {
-					if peer.Id == n.self.Id {
+				for _, p := range n.snList.Nodes {
+					if p.Id == n.self.Id {
 						continue
 					}
-					conn, err := gostream.Dial(ctx, n.self.Host, peer.Id, protocol.CommonManageProtocol)
+					conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
 					if err == nil {
 						msg := Message{
 							Operand: protocol.AliveTest,
@@ -770,13 +770,13 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 						log.Println("测定sn存活")
 						conn.Write(EncodeMessageToGobObject(msg).Bytes())
 					} else {
-						fmt.Printf("sn: Id with %s is not alive\n", peer.Id.Pretty())
+						fmt.Printf("sn: Id with %s is not alive\n", p.Id.Pretty())
 						fmt.Println(err)
 
 						// 将peer从自己的peerStore中删除
 						fmt.Println("删除这个SN")
-						n.self.Host.Peerstore().ClearAddrs(peer.Id)
-						n.snList.RemovePeer(peer.Id)
+						n.self.Host.Peerstore().ClearAddrs(p.Id)
+						n.snList.RemovePeer(p.Id)
 
 						for _, p := range n.snList.Nodes {
 							if p.Id == n.self.Id {
@@ -794,7 +794,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 								Operand: protocol.UpdateSNList,
 								SnList: cluster.Cluster{
 									Id: n.snList.Id,
-									Snid: n.snList.Snid,
+									SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
 									Nodes: peerInfoList, // nodes只有部分属性可以传过去
 									Position: n.snList.Position,
 								},
@@ -893,11 +893,11 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 				timer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
 				select {
 				case <-timer.C: {
-					for _, peer := range n.peerList.Nodes {
-						if peer.Id == n.self.Id {
+					for _, p := range n.peerList.Nodes {
+						if p.Id == n.self.Id {
 							continue
 						}
-						conn, err := gostream.Dial(ctx, n.self.Host, peer.Id, protocol.CommonManageProtocol)
+						conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
 						if err == nil {
 							msg := Message{
 								Operand: protocol.AliveTest,
@@ -905,13 +905,13 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 							log.Println("测定peer存活")
 							conn.Write(EncodeMessageToGobObject(msg).Bytes())
 						} else {
-							fmt.Printf("peer: Id with %s is not alive\n", peer.Id.Pretty())
+							fmt.Printf("peer: Id with %s is not alive\n", p.Id.Pretty())
 							fmt.Println(err)
 
 							// 将peer从自己的peerStore中删除
 							fmt.Println("删除这个peer")
-							n.self.Host.Peerstore().ClearAddrs(peer.Id)
-							n.peerList.RemovePeer(peer.Id)
+							n.self.Host.Peerstore().ClearAddrs(p.Id)
+							n.peerList.RemovePeer(p.Id)
 
 							for _, p := range n.peerList.Nodes {
 								if p.Id == n.self.Id {
@@ -929,7 +929,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 									Operand: protocol.UpdatePeerList,
 									PeerList: cluster.Cluster{
 										Id: n.peerList.Id,
-										Snid: n.peerList.Snid,
+										SN: peer.Peer{Id: n.peerList.SN.Id, P2PPort: n.peerList.SN.P2PPort},
 										Nodes: peerInfoList, // nodes只有部分属性可以传过去
 										Position: n.peerList.Position,
 									},
@@ -1103,7 +1103,7 @@ func ConstructSendableNodesList(c cluster.Cluster) []peer.Peer {
 
 func CopyCluster(c1 cluster.Cluster, c2 cluster.Cluster) cluster.Cluster {
 	c1.Id = c2.Id
-	c1.Snid = c2.Snid
+	c1.SN = peer.Peer{Id: c2.SN.Id, P2PPort: c2.SN.P2PPort}
 	c1.Nodes = c2.Nodes
 	c1.Position = c2.Position
 	return c1

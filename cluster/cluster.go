@@ -28,7 +28,7 @@ type AbsCluster interface {
 
 type Cluster struct {
 	Id       string                      `json:"id"`
-	Snid     libp2ppeer.ID               `json:"snid"`
+	SN     	 peer.Peer               	 `json:"snid"`
 	Backup	 libp2ppeer.ID				 `json:"backup"`
 	Nodes    []peer.Peer 				 `json:"nodes"`
 	Position ip.Position                 `json:"position"`
@@ -38,7 +38,7 @@ func New(p peer.Peer, cfg *config.Config) (Cluster, error) {
 	log.Println("创建Cluster")
 
 	position := ip.Position{Province: cfg.Position.Province, City: cfg.Position.City}
-	cluster := Cluster{Snid: p.Id, Nodes: make([]peer.Peer, 0), Position: position}
+	cluster := Cluster{SN: peer.Peer{Id: p.Id, P2PPort: cfg.P2P.Port}, Nodes: make([]peer.Peer, 0), Position: position}
 	cluster.Nodes = append(cluster.Nodes, p)
 
 	// generate cluster id
@@ -108,7 +108,7 @@ func (c *Cluster) FindSecondRankPeer() (*peer.Peer, string) {
 	maxRate := 0.0
 	index := 0
 	for i, p := range c.Nodes {
-		if p.Id != c.Snid {
+		if p.Id != c.SN.Id {
 			if p.Rate > maxRate {
 				index = i
 				maxRate = p.Rate
@@ -116,7 +116,7 @@ func (c *Cluster) FindSecondRankPeer() (*peer.Peer, string) {
 		}
 	}
 
-	if c.Nodes[index].Id != c.Snid {
+	if c.Nodes[index].Id != c.SN.Id {
 		return &c.Nodes[index], ""
 	}
 
