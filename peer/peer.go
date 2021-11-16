@@ -3,6 +3,7 @@ package peer
 import (
 	"StarryProxy/config"
 	"StarryProxy/ip"
+	"StarryProxy/node/service"
 	"context"
 	"fmt"
 	"github.com/libp2p/go-libp2p"
@@ -37,9 +38,11 @@ type Peer struct {
 
 	Position ip.Position
 
-	BandWidth int
-
 	Backup bool
+
+	Rate float64
+
+	Service service.Service
 }
 
 func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
@@ -55,6 +58,8 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		log.Fatalln(err)
 	}
 
+	service := service.InitService()
+
 	return &Peer{
 		Mode:     mode,
 		Host:     h,
@@ -63,6 +68,8 @@ func New(ctx context.Context, cfg *config.Config, mode Mode) (*Peer, error) {
 		Position: cfg.Position,
 		RemotePeer: "",
 		ProxyAddr: proxyAddr,
+		Rate: cfg.Rate,
+		Service: *service,
 	}, nil
 }
 
@@ -130,9 +137,9 @@ func AddAddrToPeerstore(h host.Host, addr string) peer.ID {
 	// We have a peer ID and a targetAddr so we add
 	// it to the peerstore so LibP2P knows how to contact it
 	h.Peerstore().AddAddr(peerid, targetAddr, peerstore.PermanentAddrTTL)
-	for index, value := range h.Peerstore().Peers() {
-		fmt.Printf("peer %d, %s\n", index, value)
-	}
-	log.Printf("num of peers in peerstore: %d\n", h.Peerstore().Peers().Len())
+	//for index, value := range h.Peerstore().Peers() {
+	//	fmt.Printf("peer %d, %s\n", index, value)
+	//}
+	//log.Printf("num of peers in peerstore: %d\n", h.Peerstore().Peers().Len())
 	return peerid
 }
