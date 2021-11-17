@@ -192,7 +192,6 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 	go func() {
 		<-ch
 		// TODO: peer退出逻辑
-		log.Printf("test::;.......n.self.Mode: %d\n", n.self.Mode)
 		switch n.self.Mode {
 		case peer.NormalNode:
 			{
@@ -391,7 +390,7 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 	go n.StartProxyService()
 
 	// 处理新的node加入
-	go n.StartNewNodeEntryService()
+	go n.StartNewNodeEntryService(ctx)
 
 	fmt.Println("libp2p-peer addresses:")
 	for _, a := range n.self.Host.Addrs() {
@@ -515,7 +514,6 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 				}
 				case peer.SuperNode: {
 					if n.self.Mode == peer.SuperNode || n.self.Mode == peer.MasterNode {
-
 
 						// 将sn从自己的snList中删除
 						log.Println("删除要退出的peer")
@@ -706,7 +704,7 @@ func (n *node) StartProxyService() {
 	}
 }
 
-func (n *node) StartNewNodeEntryService() {
+func (n *node) StartNewNodeEntryService(ctx context.Context) {
 	l, err := gostream.Listen(n.self.Host, protocol.NewNodeProtocol)
 	if err != nil {
 		log.Println(err)
@@ -810,6 +808,28 @@ func (n *node) StartNewNodeEntryService() {
 						LeaveNode: peer.Peer{Id: ""},
 					}
 					conn.Write(EncodeMessageToGobObject(msg).Bytes())
+
+					// 将peer进入的信息广播给整个snList
+					for _, p := range n.snList.Nodes {
+						if p.Id == n.self.Id || p.Id == pInfo.Id { // 不发给自己和这个peer
+							continue
+						}
+
+						conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+						if err != nil {
+							log.Printf("fail to dial node: %s\n", err)
+						}
+						msg := Message{
+							Operand: protocol.UpdateSNList,
+							SnList: cluster.Cluster{
+								Id: n.snList.Id,
+								SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
+								Nodes: peerInfoList, // nodes只有部分属性可以传过去
+								Position: n.snList.Position,
+							},
+						}
+						conn.Write(EncodeMessageToGobObject(msg).Bytes())
+					}
 				} else {
 					// found a supernode in current peer's position(cluster)
 					log.Println("found a SN in current peer's position")
@@ -1121,7 +1141,7 @@ func (n *node) ConnectUnconnectedClusterPeer(c cluster.Cluster) {
 			}
 		}
 		if flag {
-			n.self.Host.Peerstore().Addrs(v.Id)
+			peer.AddAddrToPeerstore(n.self.Host, fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/ipfs/%s", v.P2PPort, v.Id))
 		}
 	}
 }
