@@ -51,10 +51,10 @@ func InitConfig() (*Config, error) {
 	err = json.Unmarshal(bytes, &cfg)
 
 	// get peer position
-	cfg.IP, cfg.Position, err = ip.GetLocalPosition()
-	if err != nil {
-		log.Printf("Fail to get local position from cz88 api: %s", err)
-	}
+	//cfg.IP, cfg.Position, err = ip.GetLocalPosition()
+	//if err != nil {
+	//	log.Printf("Fail to get local position from cz88 api: %s", err)
+	//}
 
 	flag.StringVar(&cfg.SuperNode.Id, "snid", "", "supernode id used to enter the p2p net")
 	flag.IntVar(&cfg.Proxy.Port, "proxy", cfg.Proxy.Port, "proxy port")
