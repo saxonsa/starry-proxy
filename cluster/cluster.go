@@ -62,9 +62,11 @@ func (c *Cluster) AddPeer(p peer.Peer) error {
 }
 
 func (c *Cluster) RemovePeer(pid libp2ppeer.ID) string {
+	log.Printf("cluster size before: %d\n", c.GetClusterSize())
 	for index, p := range c.Nodes {
 		if p.Id == pid {
 			c.Nodes = append(c.Nodes[:index], c.Nodes[index+1:]...)
+			log.Printf("cluster size after: %d\n", c.GetClusterSize())
 			return ""
 		}
 	}
