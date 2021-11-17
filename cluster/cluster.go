@@ -26,10 +26,11 @@ type AbsCluster interface {
 	FindSecondRankPeer() (*peer.Peer, string)
 }
 
+
 type Cluster struct {
 	Id       string                      `json:"id"`
 	SN     	 peer.Peer               	 `json:"snid"`
-	Backup	 libp2ppeer.ID				 `json:"backup"`
+	Backup	 peer.Peer				 	 `json:"backup"`
 	Nodes    []peer.Peer 				 `json:"nodes"`
 	Position ip.Position                 `json:"position"`
 }

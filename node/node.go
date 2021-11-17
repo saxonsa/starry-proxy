@@ -449,7 +449,7 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 
 			// --------------------------- Backup protocol ------------------------------------------------------
 			case protocol.RaiseSnListBackup: {
-				n.snList.Backup = n.self.Id
+				n.snList.Backup = n.self
 				// 启动backup服务
 				n.BackupService(true, cluster.SNList)
 			}
@@ -461,7 +461,7 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 				n.snList.Backup = msg.SnList.Backup
 			}
 			case protocol.RaisePeerListBackup: {
-				n.peerList.Backup = n.self.Id
+				n.peerList.Backup = n.self
 				// 启动backup服务
 				n.BackupService(true, cluster.PeerList)
 			}
@@ -642,7 +642,7 @@ func (n *node) StartNewNodeEntryService() {
 		go func() {
 			// receive peer information
 			pInfo := peerInfo{}
-			buffer := make([]byte, 1024)
+			buffer := make([]byte, 2048)
 			len, err := conn.Read(buffer)
 			err = json.Unmarshal(buffer[:len], &pInfo)
 			if err != nil {
@@ -684,18 +684,19 @@ func (n *node) StartNewNodeEntryService() {
 					PeerList: cluster.Cluster{
 						Id: n.peerList.Id,
 						SN: peer.Peer{Id: n.peerList.SN.Id, P2PPort: n.peerList.SN.P2PPort},
-						Backup: "",
+						Backup: peer.Peer{Id: ""},
 						Nodes: peerInfoList,
 						Position: n.peerList.Position,
 					},
 					SnList: cluster.Cluster{
 						Id: n.snList.Id,
 						SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
-						Backup: "",
+						Backup: peer.Peer{Id: ""},
 						Nodes: SNInfoList,
 						Position: n.snList.Position,
 					},
 				}
+				log.Println(msg.PeerList.SN)
 				conn.Write(EncodeMessageToGobObject(msg).Bytes())
 
 			} else {
@@ -729,6 +730,7 @@ func (n *node) StartNewNodeEntryService() {
 					conn.Write(EncodeMessageToGobObject(msg).Bytes())
 				} else {
 					// found a supernode in current peer's position(cluster)
+					log.Println("found a SN in current peer's position")
 					msg := Message{Operand: protocol.ExistedSupernodeInSelfCluster, ExistedSupernode: peer.Peer{
 						Id: p.Id,
 						P2PPort: p.P2PPort,
@@ -810,14 +812,14 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 				if str == "" {
 					// 如果现在的选出来的backup和原来的相同 - 不改变
 					// 如果不相同 - 告诉原来的backup不成为backup, 并告诉新的backup成为backup
-					if n.snList.Backup == "" { // 此时没有backup
+					if n.snList.Backup.Id == "" { // 此时没有backup
 
 						// 告诉这个peer成为backup
 						conn, err := gostream.Dial(ctx, n.self.Host, secondRankPeer.Id, protocol.CommonManageProtocol)
 						if err != nil {
 							log.Printf("fail to dial backup: %s\n", err)
 						}
-						n.snList.Backup = secondRankPeer.Id
+						n.snList.Backup = peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort}
 						msg := Message{
 							Operand: protocol.RaiseSnListBackup,
 						}
@@ -833,18 +835,18 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 								msg := Message{
 									Operand: protocol.ChangeSnListBackup,
 									SnList: cluster.Cluster{
-										Backup: secondRankPeer.Id,
+										Backup: peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort},
 									},
 								}
 								conn.Write(EncodeMessageToGobObject(msg).Bytes())
 							}
 						}
 					}
-					if secondRankPeer.Id != n.snList.Backup {
+					if secondRankPeer.Id != n.snList.Backup.Id {
 						// 如果有backup并且新的和原来的不一样　- 更新backup
 
 						// 告诉原来的backup不成为backup
-						OriConn, err := gostream.Dial(ctx, n.self.Host, n.snList.Backup, protocol.CommonManageProtocol)
+						OriConn, err := gostream.Dial(ctx, n.self.Host, n.snList.Backup.Id, protocol.CommonManageProtocol)
 						if err != nil {
 							log.Printf("fail to dial backup: %s\n", err)
 						} else {
@@ -859,7 +861,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 						if err != nil {
 							log.Printf("fail to dial backup: %s\n", err)
 						}
-						n.snList.Backup = secondRankPeer.Id
+						n.snList.Backup = peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort}
 						msg := Message{
 							Operand: protocol.RaiseSnListBackup,
 						}
@@ -875,7 +877,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 								msg := Message{
 									Operand: protocol.ChangeSnListBackup,
 									SnList: cluster.Cluster{
-										Backup: secondRankPeer.Id,
+										Backup: peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort},
 									},
 								}
 								conn.Write(EncodeMessageToGobObject(msg).Bytes())
@@ -945,14 +947,14 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 					if str == "" {
 						// 如果现在的选出来的backup和原来的相同 - 不改变
 						// 如果不相同 - 告诉原来的backup不成为backup, 并告诉新的backup成为backup
-						if n.peerList.Backup == "" { // 此时没有backup
+						if n.peerList.Backup.Id == "" { // 此时没有backup
 
 							// 告诉这个peer成为backup
 							conn, err := gostream.Dial(ctx, n.self.Host, secondRankPeer.Id, protocol.CommonManageProtocol)
 							if err != nil {
 								log.Printf("fail to dial backup: %s\n", err)
 							}
-							n.peerList.Backup = secondRankPeer.Id
+							n.peerList.Backup = peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort}
 							msg := Message{
 								Operand: protocol.RaisePeerListBackup,
 							}
@@ -968,18 +970,18 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 									msg := Message{
 										Operand: protocol.ChangePeerListBackup,
 										PeerList: cluster.Cluster{
-											Backup: secondRankPeer.Id,
+											Backup: peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort},
 										},
 									}
 									conn.Write(EncodeMessageToGobObject(msg).Bytes())
 								}
 							}
 						}
-						if secondRankPeer.Id != n.peerList.Backup {
+						if secondRankPeer.Id != n.peerList.Backup.Id {
 							// 如果有backup并且新的和原来的不一样　- 更新backup
 
 							// 如果原来的backup没有下线 - 告诉原来的backup不成为backup
-							OriConn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup, protocol.CommonManageProtocol)
+							OriConn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
 							if err != nil { // 下线
 								log.Printf("backup offline already: %s\n", err)
 							} else { // 在线
@@ -994,7 +996,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 							if err != nil {
 								log.Printf("fail to dial backup: %s\n", err)
 							}
-							n.peerList.Backup = secondRankPeer.Id
+							n.peerList.Backup = peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort}
 							msg := Message{
 								Operand: protocol.RaisePeerListBackup,
 							}
@@ -1010,7 +1012,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 									msg := Message{
 										Operand: protocol.ChangePeerListBackup,
 										PeerList: cluster.Cluster{
-											Backup: secondRankPeer.Id,
+											Backup: peer.Peer{Id: secondRankPeer.Id, P2PPort: secondRankPeer.P2PPort},
 										},
 									}
 									conn.Write(EncodeMessageToGobObject(msg).Bytes())
@@ -1068,7 +1070,7 @@ func EncodeMessageToGobObject(msg Message) *bytes.Buffer {
 }
 
 func DecodeGobObjectIntoMessage(conn net.Conn) *Message {
-	tmp := make([]byte, 1024)
+	tmp := make([]byte, 2048)
 	_, err := conn.Read(tmp)
 	if err != nil {
 		fmt.Println(err)

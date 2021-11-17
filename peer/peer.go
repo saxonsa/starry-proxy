@@ -23,6 +23,7 @@ const (
 	NormalNode
 )
 
+
 type Peer struct {
 	Mode Mode
 
