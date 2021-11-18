@@ -844,6 +844,14 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				}
 
 				// 将peerList发给这个peer
+				peerListBackup := peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
+				if n.peerList.GetClusterSize() == 2 { // 新来的和自己两个
+					peerListBackup = peer.Peer{Id: ""}
+				}
+				snListBackup := peer.Peer{Id: n.snList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
+				if n.snList.GetClusterSize() == 1 { // 此时没有backup
+					snListBackup = peer.Peer{Id: ""}
+				}
 				peerInfoList := ConstructSendableNodesList(n.peerList)
 				SNInfoList := ConstructSendableNodesList(n.snList)
 				log.Printf("send peerList size: %d, send snList size: %d\n", n.peerList.GetClusterSize(), n.snList.GetClusterSize())
@@ -852,14 +860,14 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 					PeerList: cluster.Cluster{
 						Id: n.peerList.Id,
 						SN: peer.Peer{Id: n.peerList.SN.Id, P2PPort: n.peerList.SN.P2PPort},
-						Backup: n.peerList.Backup,
+						Backup: peerListBackup,
 						Nodes: peerInfoList,
 						Position: n.peerList.Position,
 					},
 					SnList: cluster.Cluster{
 						Id: n.snList.Id,
 						SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
-						Backup: n.snList.Backup,
+						Backup: snListBackup,
 						Nodes: SNInfoList,
 						Position: n.snList.Position,
 					},
@@ -940,6 +948,28 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 								Id: n.snList.Id,
 								SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
 								Nodes: peerInfoList, // nodes只有部分属性可以传过去
+								Position: n.snList.Position,
+							},
+						}
+						conn.Write(EncodeMessageToGobObject(msg).Bytes())
+					}
+
+					// 将peer进入的信息广播给自己的peerList
+					for _, p := range n.peerList.Nodes {
+						if p.Id == n.self.Id {
+							continue
+						}
+
+						conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+						if err != nil {
+							log.Printf("fail to broadcast new SN to node in peerList: %s\n", err)
+						}
+						msg := Message{
+							Operand: protocol.UpdateSNList,
+							SnList: cluster.Cluster{
+								Id: n.snList.Id,
+								SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
+								Nodes: peerInfoList,
 								Position: n.snList.Position,
 							},
 						}
