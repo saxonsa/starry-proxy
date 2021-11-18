@@ -1,7 +1,7 @@
 {
   "HeartBeat": {
-    "SnList": 25,
-    "PeerList": 10
+    "SnList": 10,
+    "PeerList": 5
   },
   "ClusterUpdate": 5,
   "BandWidth": 1.0,
