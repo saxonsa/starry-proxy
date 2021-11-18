@@ -803,7 +803,7 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 		go func() {
 			// receive peer information
 			pInfo := peerInfo{}
-			buffer := make([]byte, 2048)
+			buffer := make([]byte, 4096)
 			len, err := conn.Read(buffer)
 			err = json.Unmarshal(buffer[:len], &pInfo)
 			if err != nil {
@@ -813,8 +813,13 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 			// put the normal node in the right cluster
 			if pInfo.Position == n.peerList.GetClusterPosition() {
 				if n.self.Mode == peer.NormalNode {
-					supernode := n.peerList.FindSuperNodeInPosition(n.peerList.Position)
-					msg := Message{Operand: protocol.ExistedSupernodeInSelfCluster, ExistedSupernode: *supernode}
+					msg := Message{
+						Operand: protocol.ExistedSupernodeInSelfCluster,
+						ExistedSupernode: peer.Peer{
+							Id: n.peerList.SN.Id,
+							P2PPort: n.peerList.SN.P2PPort,
+						},
+					}
 					conn.Write(EncodeMessageToGobObject(msg).Bytes())
 					return
 				}
@@ -861,6 +866,31 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				}
 
 				conn.Write(EncodeMessageToGobObject(msg).Bytes())
+
+				// 将peer进入的信息广播给整个peerList
+				for _, p := range n.peerList.Nodes {
+					if p.Id == n.self.Id || p.Id == pInfo.Id {
+						continue
+					}
+
+					conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+					if err != nil {
+						log.Printf("fail to broadcast info to peerList: %s\n", err)
+					} else {
+						msg := Message{
+							Operand: protocol.UpdatePeerList,
+							PeerList: cluster.Cluster{
+								Id: n.peerList.Id,
+								SN: peer.Peer{Id: n.peerList.SN.Id, P2PPort: n.peerList.SN.P2PPort},
+								Nodes: peerInfoList, // nodes只有部分属性可以传过去
+								Position: n.peerList.Position,
+								Backup: n.peerList.Backup,
+							},
+						}
+						conn.Write(EncodeMessageToGobObject(msg).Bytes())
+					}
+
+				}
 
 			} else {
 				// find if the supernode of the right cluster exists
@@ -1254,7 +1284,7 @@ func EncodeMessageToGobObject(msg Message) *bytes.Buffer {
 }
 
 func DecodeGobObjectIntoMessage(conn net.Conn) *Message {
-	tmp := make([]byte, 2048)
+	tmp := make([]byte, 4096)
 	_, err := conn.Read(tmp)
 	if err != nil {
 		fmt.Println(err)
