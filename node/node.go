@@ -41,9 +41,9 @@ type node struct {
 
 	snList	cluster.Cluster
 
-	peerListTimer time.Timer
+	peerListTimer *time.Timer
 
-	snListTimer time.Timer
+	snListTimer *time.Timer
 }
 
 
@@ -53,7 +53,7 @@ type listener struct {
 
 func New(peer peer.Peer) (Node, error) {
 	gob.Register(Message{})
-	node := node{self: peer}
+	node := node{self: peer, peerListTimer: nil, snListTimer: nil}
 	return &node, nil
 }
 
@@ -219,27 +219,29 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 				// 如果cluster里面只有supernode
 				if n.peerList.GetClusterSize() != 1 {
 					// 将权限交给backup
-					conn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
-					if err != nil {
-						// backup不存在
-						log.Printf("fail to dial backup while exit: %s\n", err)
-					} else {
-						// backup 存在
-						log.Println("让backup成为SN")
-						backup = peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
-						msg := Message{
-							Operand: protocol.AssignSelfAsSupernode,
-							ClusterType: cluster.PeerList,
-							Sender: peer.Peer{
-								Id: n.self.Id,
-								Mode: peer.SuperNode,
-							},
-							LeaveNode: peer.Peer{
-								Id: n.self.Id,
-								Mode: peer.SuperNode,
-							},
+					if n.peerList.Backup.Id != "" {
+						conn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
+						if err != nil {
+							// backup不存在
+							log.Printf("fail to dial backup while exit: %s\n", err)
+						} else {
+							// backup 存在
+							log.Println("让backup成为SN")
+							backup = peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
+							msg := Message{
+								Operand: protocol.AssignSelfAsSupernode,
+								ClusterType: cluster.PeerList,
+								Sender: peer.Peer{
+									Id: n.self.Id,
+									Mode: peer.SuperNode,
+								},
+								LeaveNode: peer.Peer{
+									Id: n.self.Id,
+									Mode: peer.SuperNode,
+								},
+							}
+							conn.Write(EncodeMessageToGobObject(msg).Bytes())
 						}
-						conn.Write(EncodeMessageToGobObject(msg).Bytes())
 					}
 				}
 
@@ -296,18 +298,20 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 				if n.peerList.GetClusterSize() > 1 {
 					backup := peer.Peer{Id: "", P2PPort: 0}
 					// 让backup作为SN
-					conn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
-					if err != nil {
-						fmt.Printf("fail to assign the second node as SN: %s\n", err)
-					} else {
-						backup = peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
-						msg := Message{
-							Operand: protocol.AssignSelfAsSupernode,
-							ClusterType: cluster.PeerList,
-							LeaveNode: peer.Peer{Id: n.self.Id, P2PPort: n.self.P2PPort},
+					if n.peerList.Backup.Id != "" {
+						conn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
+						if err != nil {
+							fmt.Printf("fail to assign the second node as SN: %s\n", err)
+						} else {
+							backup = peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
+							msg := Message{
+								Operand: protocol.AssignSelfAsSupernode,
+								ClusterType: cluster.PeerList,
+								LeaveNode: peer.Peer{Id: n.self.Id, P2PPort: n.self.P2PPort},
+							}
+							log.Println("assign backup as SN")
+							conn.Write(EncodeMessageToGobObject(msg).Bytes())
 						}
-						log.Println("assign backup as SN")
-						conn.Write(EncodeMessageToGobObject(msg).Bytes())
 					}
 
 
@@ -457,6 +461,16 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 				//conn.Write(EncodeMessageToGobObject(msg).Bytes())
 			}
 			case protocol.AssignSelfAsSupernode: {
+				// 停掉原来的Timer
+				if n.peerListTimer != nil {
+					n.peerListTimer.Stop()
+					n.peerListTimer = nil
+				}
+				if n.snListTimer != nil {
+					n.snListTimer.Stop()
+					n.snListTimer = nil
+				}
+
 				if msg.ClusterType == cluster.PeerList {
 					log.Println("成为SN")
 					n.self.Mode = peer.SuperNode
@@ -518,6 +532,13 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 						// 将sn从自己的snList中删除
 						log.Println("删除要退出的peer")
 						n.snList.RemovePeer(msg.Sender.Id)
+						if msg.Sender.Id == n.snList.Backup.Id {
+							n.snList.Backup.Id = ""
+						}
+						if n.snList.GetClusterSize() == 2 {
+							// 可以将另外那个直接作为backup
+
+						}
 
 						// 如果有新的backup成为了sn, 在自己的snList上加入新的node
 						if msg.NewNode.Id != "" {
@@ -855,13 +876,18 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 // StartAliveTest 测定peer的存活, 并且用于测量bandwidth和更新cluster
 func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) {
 	// 创建一个timer设置在10s后执行
-	timer := time.NewTimer(time.Second)
+	if clusterType == cluster.SNList {
+		n.snListTimer = time.NewTimer(time.Second)
+	} else {
+		n.peerListTimer = time.NewTimer(time.Second)
+	}
+
 	switch clusterType {
 	case cluster.SNList: {
 		for {
-			timer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
+			n.snListTimer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
 			select {
-			case <-timer.C: {
+			case <-n.snListTimer.C: {
 				for _, p := range n.snList.Nodes {
 					if p.Id == n.self.Id {
 						continue
@@ -994,9 +1020,9 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 	}
 	case cluster.PeerList: {
 		for {
-				timer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
+				n.peerListTimer.Reset(time.Duration(period) * time.Second) // 复用了 timer, 每1分钟探测一次Peer的存活
 				select {
-				case <-timer.C: {
+				case <-n.peerListTimer.C: {
 					for _, p := range n.peerList.Nodes {
 						if p.Id == n.self.Id {
 							continue
@@ -1006,6 +1032,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 							msg := Message{
 								Operand: protocol.AliveTest,
 							}
+							log.Printf("pid: %s\n", p.Id)
 							log.Println("测定peer存活")
 							conn.Write(EncodeMessageToGobObject(msg).Bytes())
 						} else {
