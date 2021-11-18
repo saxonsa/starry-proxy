@@ -129,9 +129,10 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				return
 			}
 			case protocol.PeerList: {
+				log.Println("接收PeerList")
 				// copy msg.PeerList into n.SnList
 				n.peerList = CopyCluster(n.peerList, msg.PeerList)
-
+				log.Printf("sizeof peerList: %d\n", n.peerList.GetClusterSize())
 				// 将peerList中和自己没有连接的连起来
 				n.ConnectUnconnectedClusterPeer(n.peerList)
 			}
@@ -139,12 +140,14 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				log.Println("接收clusterList")
 				n.snList = CopyCluster(n.snList, msg.SnList)
 				n.peerList = CopyCluster(n.peerList, msg.PeerList)
+				log.Printf("size of snList: %d, sizeof peerList: %d\n", n.snList.GetClusterSize(), n.peerList.GetClusterSize())
 				n.ConnectUnconnectedClusterPeer(n.snList)
 				n.ConnectUnconnectedClusterPeer(n.peerList)
 			}
 			case protocol.SNList: {
+				log.Println("接收SNList")
 				n.snList = CopyCluster(n.snList, msg.SnList)
-
+				log.Printf("sizeof snList: %d\n", n.snList.GetClusterSize())
 				// 将snlist中和自己没有连接起来的连起来
 				n.ConnectUnconnectedClusterPeer(n.snList)
 			}
@@ -152,8 +155,10 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				n.self.Mode = peer.SuperNode
 				n.peerList, _ = cluster.New(n.self, cfg)
 
+				log.Println("接收SNList")
 				// copy msg.Snlist into n.snlist
 				n.snList = CopyCluster(n.snList, msg.SnList)
+				log.Printf("sizeof snList: %d\n", n.snList.GetClusterSize())
 
 				// 将snlist中和自己没有连接起来的连起来
 				n.ConnectUnconnectedClusterPeer(n.snList)
@@ -295,50 +300,7 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 			}
 		case peer.MasterNode:
 			{
-				if n.peerList.GetClusterSize() > 1 {
-					backup := peer.Peer{Id: "", P2PPort: 0}
-					// 让backup作为SN
-					if n.peerList.Backup.Id != "" {
-						conn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
-						if err != nil {
-							fmt.Printf("fail to assign the second node as SN: %s\n", err)
-						} else {
-							backup = peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
-							msg := Message{
-								Operand: protocol.AssignSelfAsSupernode,
-								ClusterType: cluster.PeerList,
-								LeaveNode: peer.Peer{Id: n.self.Id, P2PPort: n.self.P2PPort},
-							}
-							log.Println("assign backup as SN")
-							conn.Write(EncodeMessageToGobObject(msg).Bytes())
-						}
-					}
-
-
-					// 向peerList广播自己的离开
-					for _, p := range n.peerList.Nodes {
-						if p.Id == n.self.Id {
-							continue
-						}
-						conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
-						if err == nil {
-							msg := Message{
-								Operand: protocol.NodeLeave,
-								Sender: peer.Peer{
-									Id: n.self.Id,
-									Mode: peer.MasterNode,
-								},
-								NewSN: peer.Peer{
-									Id: backup.Id,
-									P2PPort: backup.P2PPort,
-								},
-							}
-							log.Println("告诉peerList中的node自己离开")
-							conn.Write(EncodeMessageToGobObject(msg).Bytes())
-						}
-					}
-				}
-
+				newMasterNode := peer.Peer{Id: ""}
 				if n.snList.GetClusterSize() > 1 {
 					backup := peer.Peer{Id: "", P2PPort: 0}
 
@@ -348,6 +310,7 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 						fmt.Printf("fail to assign Backup SN as Master node: %s\n", err)
 					} else {
 						backup = peer.Peer{Id: n.snList.Backup.Id, P2PPort: n.snList.Backup.P2PPort}
+						newMasterNode = backup
 						msg := Message{
 							Operand: protocol.AssignSelfAsSupernode,
 							ClusterType: cluster.SNList,
@@ -360,7 +323,7 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 
 					// 告诉所有的SN自己的离开
 					for _, p := range n.snList.Nodes {
-						if p.Id == n.self.Id {
+						if p.Id == n.self.Id || p.Id == n.snList.Backup.Id {
 							continue
 						}
 						conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
@@ -381,6 +344,103 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 						}
 					}
 				}
+
+				if n.peerList.GetClusterSize() > 1 {
+					backup := peer.Peer{Id: "", P2PPort: 0}
+					if newMasterNode.Id == "" {
+						// 让backup作为Master
+						if n.peerList.Backup.Id != "" {
+							conn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
+							if err != nil {
+								fmt.Printf("fail to assign the second node as SN: %s\n", err)
+							} else {
+								backup = peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
+								msg := Message{
+									Operand: protocol.AssignSelfAsSupernode,
+									ClusterType: cluster.SNList,
+									LeaveNode: peer.Peer{Id: n.self.Id, P2PPort: n.self.P2PPort},
+								}
+								log.Println("assign backup as Master")
+								conn.Write(EncodeMessageToGobObject(msg).Bytes())
+							}
+						}
+
+						// 向peerList广播自己的离开
+						for _, p := range n.peerList.Nodes {
+							if p.Id == n.self.Id || p.Id == n.peerList.Backup.Id {
+								continue
+							}
+							conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+							if err == nil {
+								n.snList.AddPeer(backup)
+								sendableNodeList := ConstructSendableNodesList(n.snList)
+								msg := Message{
+									Operand: protocol.NodeLeave,
+									Sender: peer.Peer{
+										Id: n.self.Id,
+										Mode: peer.MasterNode,
+									},
+									NewSN: peer.Peer{
+										Id: backup.Id,
+										P2PPort: backup.P2PPort,
+									},
+									SnList: cluster.Cluster{
+										Id: n.snList.Id,
+										Backup: peer.Peer{Id: ""},
+										Nodes: sendableNodeList,
+										Position: n.snList.Position,
+										SN: backup,
+									},
+								}
+								log.Println("告诉peerList中的node自己离开")
+								conn.Write(EncodeMessageToGobObject(msg).Bytes())
+							}
+						}
+					} else {
+						// 让backup作为SN
+						if n.peerList.Backup.Id != "" {
+							conn, err := gostream.Dial(ctx, n.self.Host, n.peerList.Backup.Id, protocol.CommonManageProtocol)
+							if err != nil {
+								fmt.Printf("fail to assign the second node as SN: %s\n", err)
+							} else {
+								backup = peer.Peer{Id: n.peerList.Backup.Id, P2PPort: n.peerList.Backup.P2PPort}
+								msg := Message{
+									Operand: protocol.AssignSelfAsSupernode,
+									ClusterType: cluster.PeerList,
+									LeaveNode: peer.Peer{Id: n.self.Id, P2PPort: n.self.P2PPort},
+								}
+								log.Println("assign backup as SN")
+								conn.Write(EncodeMessageToGobObject(msg).Bytes())
+							}
+						}
+
+						// 向peerList广播自己的离开
+						for _, p := range n.peerList.Nodes {
+							if p.Id == n.self.Id || p.Id == n.peerList.Backup.Id {
+								continue
+							}
+							conn, err := gostream.Dial(ctx, n.self.Host, p.Id, protocol.CommonManageProtocol)
+							if err == nil {
+								msg := Message{
+									Operand: protocol.NodeLeave,
+									Sender: peer.Peer{
+										Id: n.self.Id,
+										Mode: peer.MasterNode,
+									},
+									NewSN: peer.Peer{
+										Id: backup.Id,
+										P2PPort: backup.P2PPort,
+									},
+								}
+								log.Println("告诉peerList中的node自己离开")
+								conn.Write(EncodeMessageToGobObject(msg).Bytes())
+							}
+						}
+					}
+
+				}
+
+
 			}
 		}
 		fmt.Println("node quit!")
@@ -454,6 +514,7 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 			}
 			case protocol.AliveTest: { // 接收心跳测试
 				log.Println("接收到alivetest")
+				log.Printf("size of peerList: %d, size of snList: %d\n", n.peerList.GetClusterSize(), n.snList.GetClusterSize())
 				//msg := Message{
 				//	Operand: protocol.AliveTestAck,
 				//}
@@ -480,12 +541,20 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 					n.peerList.SN = n.self
 					go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
 
-				} else { // SSN
+				} else { // SSN'
+					if n.self.Mode == peer.NormalNode {
+						if msg.LeaveNode.Id != "" {
+							n.peerList.RemovePeer(msg.LeaveNode.Id)
+						}
+						n.snList.AddPeer(n.self)
+					}
 					n.self.Mode = peer.MasterNode
 					log.Println("成为Master")
+
 					if msg.LeaveNode.Id != "" {
 						n.snList.RemovePeer(msg.LeaveNode.Id)
 					}
+
 					n.snList.SN = n.self
 					go n.StartAliveTest(ctx, cluster.SNList, params.HeartBeat.SnList)
 					go n.StartAliveTest(ctx, cluster.PeerList, params.HeartBeat.PeerList)
@@ -635,6 +704,11 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 
 							// 连接到新的Supernode
 							n.peerList.SN = peer.Peer{Id: msg.NewSN.Id, P2PPort: msg.NewSN.P2PPort}
+
+							//// 更新SNList
+							//if n.snList.GetClusterSize() == 0 {
+							//	n.snList
+							//}
 						}
 					}
 				}
@@ -756,7 +830,7 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 					return
 				}
 
-				fmt.Println("put the node in my cluster")
+				log.Println("put the node in my cluster")
 				// at the same position - put in the same cluster - conn directly to sn
 				err := n.peerList.AddPeer(peer.Peer{
 					Id: pInfo.Id,
@@ -778,19 +852,20 @@ func (n *node) StartNewNodeEntryService(ctx context.Context) {
 				// 将peerList发给这个peer
 				peerInfoList := ConstructSendableNodesList(n.peerList)
 				SNInfoList := ConstructSendableNodesList(n.snList)
+				log.Printf("send peerList size: %d, send snList size: %d\n", n.peerList.GetClusterSize(), n.snList.GetClusterSize())
 				msg := Message{
 					Operand: protocol.AllClusterList,
 					PeerList: cluster.Cluster{
 						Id: n.peerList.Id,
 						SN: peer.Peer{Id: n.peerList.SN.Id, P2PPort: n.peerList.SN.P2PPort},
-						Backup: peer.Peer{Id: ""},
+						Backup: n.peerList.Backup,
 						Nodes: peerInfoList,
 						Position: n.peerList.Position,
 					},
 					SnList: cluster.Cluster{
 						Id: n.snList.Id,
 						SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
-						Backup: peer.Peer{Id: ""},
+						Backup: n.snList.Backup,
 						Nodes: SNInfoList,
 						Position: n.snList.Position,
 					},
@@ -900,6 +975,9 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 						log.Println("测定sn存活")
 						conn.Write(EncodeMessageToGobObject(msg).Bytes())
 					} else {
+						if p.Id == n.snList.Backup.Id {
+							n.snList.Backup = peer.Peer{Id: ""}
+						}
 						fmt.Printf("sn: Id with %s is not alive\n", p.Id.Pretty())
 						fmt.Println(err)
 
@@ -927,6 +1005,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 									SN: peer.Peer{Id: n.snList.SN.Id, P2PPort: n.snList.SN.P2PPort},
 									Nodes: peerInfoList, // nodes只有部分属性可以传过去
 									Position: n.snList.Position,
+									Backup: n.snList.Backup,
 								},
 							}
 							log.Println("发送最新的snlist")
@@ -1044,6 +1123,10 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 							n.self.Host.Peerstore().ClearAddrs(p.Id)
 							n.peerList.RemovePeer(p.Id)
 
+							if p.Id == n.peerList.Backup.Id {
+								n.peerList.Backup = peer.Peer{Id: ""}
+							}
+
 							for _, p := range n.peerList.Nodes {
 								if p.Id == n.self.Id {
 									continue
@@ -1063,6 +1146,7 @@ func (n *node) StartAliveTest(ctx context.Context, clusterType int, period int) 
 										SN: peer.Peer{Id: n.peerList.SN.Id, P2PPort: n.peerList.SN.P2PPort},
 										Nodes: peerInfoList, // nodes只有部分属性可以传过去
 										Position: n.peerList.Position,
+										Backup: n.peerList.Backup,
 									},
 								}
 								log.Println("发送最新的peerList")
