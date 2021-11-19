@@ -152,6 +152,18 @@ func (n *node) ConnectToNet(ctx context.Context, cfg *config.Config, snid libp2p
 				n.ConnectUnconnectedClusterPeer(n.snList)
 			}
 			case protocol.AssignSelfAsSupernode: {
+				if msg.LeaveNode.Id == n.self.RemotePeer {
+					RemotePeer := n.peerList.FindRandomPeer(n.self.Id)
+					if RemotePeer != nil {
+						n.self.RemotePeer = RemotePeer.Id
+					} else {
+						RemotePeer = n.snList.FindRandomPeer(n.self.Id)
+						if RemotePeer != nil {
+							n.self.RemotePeer = RemotePeer.Id
+						}
+					}
+				}
+
 				n.self.Mode = peer.SuperNode
 				n.peerList, _ = cluster.New(n.self, cfg)
 
@@ -326,10 +338,25 @@ func (n *node) StartService(ctx context.Context, params *parameters.Parameter) {
 
 			case protocol.NodeLeave: {
 				n.self.Host.Peerstore().ClearAddrs(msg.Sender.Id)
+				if msg.Sender.Id == n.self.RemotePeer { // 更换remotePeer
+					log.Println("自己的remotePeer离开了")
+					RemotePeer := n.peerList.FindRandomPeer(n.self.Id)
+					if RemotePeer != nil {
+						n.self.RemotePeer = RemotePeer.Id
+					} else {
+						// 用其他cluster的SN作为remoteNode
+						RemotePeer = n.snList.FindRandomPeer(n.self.Id)
+						if RemotePeer != nil {
+							n.self.RemotePeer = RemotePeer.Id
+						}
+					}
+				}
 				switch msg.Sender.Mode {
 				case peer.NormalNode: {
+
 					log.Println("PeerList中有normal node离开, 更新自己的peerList")
 					n.peerList.RemovePeer(msg.Sender.Id)
+
 				}
 				case peer.SuperNode: {
 					if n.self.Mode == peer.SuperNode || n.self.Mode == peer.MasterNode {
@@ -512,7 +539,8 @@ func (n *node) connHandler(ctx context.Context, conn net.Conn) error {
 	// 将stream转发给remote peer
 	stream, err := n.self.Host.NewStream(ctx, n.self.RemotePeer, protocol.HTTPProxyProtocol)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
+		return nil
 	}
 	err = relay.CloseAfterRelay(conn, stream)
 	if err != nil {
