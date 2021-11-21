@@ -84,22 +84,22 @@ func makeHost(ctx context.Context, cfg *config.Config) (h host.Host, err error) 
 	var opt libp2p.Option
 	var opts []libp2p.Option
 
-	//if opt, err = listenP2PAddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.P2P.Port)); err != nil {
-	//	return nil, err
-	//}
-	extMultiAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.P2P.Port))
-	if err != nil {
-		log.Printf("Error creating multiaddress: %v\n", err)
+	if opt, err = listenP2PAddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.P2P.Port)); err != nil {
 		return nil, err
 	}
-	addressFactory := func(addrs []ma.Multiaddr) []ma.Multiaddr {
-		if extMultiAddr != nil {
-			addrs = append(addrs, extMultiAddr)
-		}
-		return addrs
-	}
-
-	opt = libp2p.AddrsFactory(addressFactory)
+	//extMultiAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", cfg.P2P.Port))
+	//if err != nil {
+	//	log.Printf("Error creating multiaddress: %v\n", err)
+	//	return nil, err
+	//}
+	//addressFactory := func(addrs []ma.Multiaddr) []ma.Multiaddr {
+	//	if extMultiAddr != nil {
+	//		addrs = append(addrs, extMultiAddr)
+	//	}
+	//	return addrs
+	//}
+	//
+	//opt = libp2p.AddrsFactory(addressFactory)
 
 	opts = append(opts, opt)
 
@@ -110,9 +110,9 @@ func makeHost(ctx context.Context, cfg *config.Config) (h host.Host, err error) 
 	return h, nil
 }
 
-//func listenP2PAddr(addr string) (libp2p.Option, error) {
-//	return libp2p.ListenAddrStrings(addr), nil
-//}
+func listenP2PAddr(addr string) (libp2p.Option, error) {
+	return libp2p.ListenAddrStrings(addr), nil
+}
 
 // AddAddrToPeerstore parses a peer multiaddress and adds
 // it to the given host's peerstore, so it knows how to

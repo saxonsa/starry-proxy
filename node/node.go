@@ -218,9 +218,18 @@ func (n *node) Serve(ctx context.Context, params *parameters.Parameter) {
 	go n.StartNewNodeEntryService(ctx)
 
 	fmt.Println("libp2p-peer addresses:")
-	for _, a := range n.self.Host.Addrs() {
-		fmt.Printf("%s/ipfs/%s\n", a, libp2ppeer.Encode(n.self.Id))
-	}
+	//for _, a := range n.self.Host.Addrs() {
+	//
+	//	params := make(map[string]string)
+	//	params["mode"] = string(rune(peer.MasterNode))
+	//	params["id"] = string(n.self.Id)
+	//	params["province"] = n.self.Position.Province
+	//	params["city"] = n.self.Position.City
+	//	params["address"] = fmt.Sprintf("%s/ipfs/%s", a, libp2ppeer.Encode(n.self.Id))
+	//	request.Post("/display_p2p_address", params)
+	//
+	//	fmt.Printf("%s/ipfs/%s\n", a, libp2ppeer.Encode(n.self.Id))
+	//}
 
 	switch n.self.Mode {
 		case peer.MasterNode: {
